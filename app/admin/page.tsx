@@ -2,14 +2,14 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { fetchEvents, createEvent, deleteEvent } from '@/lib/supabaseClient';
+import { fetchEvents, createEvent, deleteEvent, getAllRegistrations, deleteRegistration, updateRegistrationStatus } from '@/lib/supabaseClient';
 import { Event } from '@/types/event';
 import { 
   Calendar, Users, FileText, Settings, CheckCircle, 
   Download, Plus, BarChart3, Search, Filter, 
   Eye, Edit, Trash2, Clock, UserCheck, Mail, 
   Award, MapPin, Tag, ChevronRight, Upload,
-  X, Image as ImageIcon, LogOut, Check, AlertCircle
+  X, LogOut, RefreshCw
 } from 'lucide-react';
 
 export default function AdminPage() {
@@ -41,6 +41,10 @@ export default function AdminPage() {
   // Events data from Supabase
   const [events, setEvents] = useState<Event[]>([]);
 
+  // Registrations data
+  const [registrations, setRegistrations] = useState<any[]>([]);
+  const [loadingRegistrations, setLoadingRegistrations] = useState(false);
+
   // Check admin authentication
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -61,6 +65,13 @@ export default function AdminPage() {
     }
   }, [isAdmin]);
 
+  // Load registrations when participants tab is active
+  useEffect(() => {
+    if (activeTab === 'participants' && isAdmin) {
+      loadRegistrations();
+    }
+  }, [activeTab, isAdmin]);
+
   const loadEvents = async () => {
     try {
       const data = await fetchEvents();
@@ -68,6 +79,19 @@ export default function AdminPage() {
     } catch (error) {
       console.error('Error loading events:', error);
       alert('Error loading events');
+    }
+  };
+
+  const loadRegistrations = async () => {
+    try {
+      setLoadingRegistrations(true);
+      const data = await getAllRegistrations();
+      setRegistrations(data);
+    } catch (error) {
+      console.error('Error loading registrations:', error);
+      alert('Error loading registrations');
+    } finally {
+      setLoadingRegistrations(false);
     }
   };
 
@@ -141,6 +165,41 @@ export default function AdminPage() {
     } catch (error) {
       console.error('Error deleting event:', error);
       alert('Error deleting event');
+    }
+  };
+
+  // Delete registration
+  const handleDeleteRegistration = async (id: number) => {
+    if (!confirm('Are you sure you want to delete this registration?')) return;
+
+    try {
+      const success = await deleteRegistration(id);
+      if (success) {
+        alert('Registration deleted successfully!');
+        loadRegistrations();
+        loadEvents(); // Refresh events to update participant count
+      } else {
+        alert('Failed to delete registration');
+      }
+    } catch (error) {
+      console.error('Error deleting registration:', error);
+      alert('Error deleting registration');
+    }
+  };
+
+  // Update registration status
+  const handleUpdateStatus = async (id: number, status: 'attended' | 'cancelled') => {
+    try {
+      const success = await updateRegistrationStatus(id, status);
+      if (success) {
+        alert(`Registration marked as ${status}`);
+        loadRegistrations();
+      } else {
+        alert('Failed to update status');
+      }
+    } catch (error) {
+      console.error('Error updating status:', error);
+      alert('Error updating status');
     }
   };
 
@@ -533,171 +592,297 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* Events List */}
-        <div className="bg-white rounded-xl shadow-lg overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-200">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div>
-                <h2 className="text-2xl font-bold text-gray-900">All Events</h2>
-                <p className="text-gray-600 mt-1">
-                  Total: {events.length} events • Showing: {filteredEvents.length}
-                </p>
-              </div>
-              
-              <div className="flex items-center gap-3">
-                <button 
-                  onClick={loadEvents}
-                  className="text-sm text-gray-700 hover:text-gray-900 flex items-center gap-2 px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
-                >
-                  <RefreshCw className="w-4 h-4" />
-                  Refresh
-                </button>
-                <button className="text-sm text-gray-700 hover:text-gray-900 flex items-center gap-2 px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">
-                  <Filter className="w-4 h-4" />
-                  Filter
-                </button>
+        {/* Tab Content */}
+        {activeTab === 'events' && (
+          <div className="bg-white rounded-xl shadow-lg overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-200">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-900">All Events</h2>
+                  <p className="text-gray-600 mt-1">
+                    Total: {events.length} events • Showing: {filteredEvents.length}
+                  </p>
+                </div>
+                
+                <div className="flex items-center gap-3">
+                  <button 
+                    onClick={loadEvents}
+                    className="text-sm text-gray-700 hover:text-gray-900 flex items-center gap-2 px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                    Refresh
+                  </button>
+                  <button className="text-sm text-gray-700 hover:text-gray-900 flex items-center gap-2 px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">
+                    <Filter className="w-4 h-4" />
+                    Filter
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
-          
-          {/* Events Grid */}
-          <div className="p-6">
-            {filteredEvents.length === 0 ? (
-              <div className="text-center py-12">
-                <Calendar className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">No events found</h3>
-                <p className="text-gray-600 mb-6">Create your first event to get started</p>
-                <button
-                  onClick={() => setShowCreateForm(true)}
-                  className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-3 rounded-lg hover:from-blue-700 hover:to-purple-700 transition-all"
-                >
-                  Create Event
-                </button>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filteredEvents.map((event) => (
-                  <div key={event.id} className="bg-gray-50 rounded-xl border border-gray-200 overflow-hidden hover:shadow-lg transition-shadow">
-                    {/* Event Header */}
-                    <div className="p-6">
-                      <div className="flex items-start justify-between mb-4">
-                        <div>
-                          <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                            event.category === 'Workshop' ? 'bg-blue-100 text-blue-800' :
-                            event.category === 'Seminar' ? 'bg-green-100 text-green-800' :
-                            event.category === 'Fest' ? 'bg-purple-100 text-purple-800' :
-                            'bg-yellow-100 text-yellow-800'
-                          }`}>
-                            {event.category}
-                          </span>
-                          <div className="flex items-center gap-2 mt-2">
-                            <span className={`px-2 py-1 text-xs rounded-full ${
-                              event.status === 'active' ? 'bg-green-100 text-green-800' :
-                              event.status === 'upcoming' ? 'bg-blue-100 text-blue-800' :
-                              'bg-gray-100 text-gray-800'
+            
+            {/* Events Grid */}
+            <div className="p-6">
+              {filteredEvents.length === 0 ? (
+                <div className="text-center py-12">
+                  <Calendar className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">No events found</h3>
+                  <p className="text-gray-600 mb-6">Create your first event to get started</p>
+                  <button
+                    onClick={() => setShowCreateForm(true)}
+                    className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-3 rounded-lg hover:from-blue-700 hover:to-purple-700 transition-all"
+                  >
+                    Create Event
+                  </button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {filteredEvents.map((event) => (
+                    <div key={event.id} className="bg-gray-50 rounded-xl border border-gray-200 overflow-hidden hover:shadow-lg transition-shadow">
+                      {/* Event Header */}
+                      <div className="p-6">
+                        <div className="flex items-start justify-between mb-4">
+                          <div>
+                            <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                              event.category === 'Workshop' ? 'bg-blue-100 text-blue-800' :
+                              event.category === 'Seminar' ? 'bg-green-100 text-green-800' :
+                              event.category === 'Fest' ? 'bg-purple-100 text-purple-800' :
+                              'bg-yellow-100 text-yellow-800'
                             }`}>
-                              {event.status}
+                              {event.category}
                             </span>
-                            {event.certificate_ready && (
-                              <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full flex items-center gap-1">
-                                <Award className="w-3 h-3" />
-                                Cert Ready
+                            <div className="flex items-center gap-2 mt-2">
+                              <span className={`px-2 py-1 text-xs rounded-full ${
+                                event.status === 'active' ? 'bg-green-100 text-green-800' :
+                                event.status === 'upcoming' ? 'bg-blue-100 text-blue-800' :
+                                'bg-gray-100 text-gray-800'
+                              }`}>
+                                {event.status}
                               </span>
-                            )}
+                              {event.certificate_ready && (
+                                <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full flex items-center gap-1">
+                                  <Award className="w-3 h-3" />
+                                  Cert Ready
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => router.push(`/events/edit/${event.id}`)}
+                              className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                              title="Edit"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteEvent(event.id)}
+                              className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                              title="Delete"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
                           </div>
                         </div>
                         
-                        <div className="flex items-center gap-1">
-                          <button
-                            onClick={() => router.push(`/events/edit/${event.id}`)}
-                            className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                            title="Edit"
-                          >
-                            <Edit className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteEvent(event.id)}
-                            className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                            title="Delete"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                        {/* Event Title */}
+                        <h3 className="text-xl font-bold text-gray-900 mb-3 line-clamp-1">
+                          {event.title}
+                        </h3>
+                        
+                        {/* Event Description */}
+                        <p className="text-gray-600 mb-6 line-clamp-2">
+                          {event.description}
+                        </p>
+                        
+                        {/* Event Details */}
+                        <div className="space-y-3">
+                          <div className="flex items-center text-gray-700">
+                            <Calendar className="w-4 h-4 mr-2 text-blue-600" />
+                            <span className="text-sm">
+                              {new Date(event.date).toLocaleDateString('en-US', { 
+                                weekday: 'short', 
+                                year: 'numeric', 
+                                month: 'short', 
+                                day: 'numeric' 
+                              })}
+                            </span>
+                          </div>
+                          
+                          <div className="flex items-center text-gray-700">
+                            <Clock className="w-4 h-4 mr-2 text-blue-600" />
+                            <span className="text-sm">{event.time}</span>
+                          </div>
+                          
+                          <div className="flex items-center text-gray-700">
+                            <MapPin className="w-4 h-4 mr-2 text-blue-600" />
+                            <span className="text-sm">{event.location}</span>
+                          </div>
+                          
+                          <div className="flex items-center text-gray-700">
+                            <Users className="w-4 h-4 mr-2 text-blue-600" />
+                            <span className="text-sm">
+                              {event.current_participants} / {event.max_participants} participants
+                            </span>
+                          </div>
+                          
+                          <div className="flex items-center text-gray-700">
+                            <UserCheck className="w-4 h-4 mr-2 text-blue-600" />
+                            <span className="text-sm">Organizer: {event.organizer}</span>
+                          </div>
                         </div>
                       </div>
                       
-                      {/* Event Title */}
-                      <h3 className="text-xl font-bold text-gray-900 mb-3 line-clamp-1">
-                        {event.title}
-                      </h3>
-                      
-                      {/* Event Description */}
-                      <p className="text-gray-600 mb-6 line-clamp-2">
-                        {event.description}
-                      </p>
-                      
-                      {/* Event Details */}
-                      <div className="space-y-3">
-                        <div className="flex items-center text-gray-700">
-                          <Calendar className="w-4 h-4 mr-2 text-blue-600" />
-                          <span className="text-sm">
-                            {new Date(event.date).toLocaleDateString('en-US', { 
-                              weekday: 'short', 
-                              year: 'numeric', 
-                              month: 'short', 
-                              day: 'numeric' 
-                            })}
-                          </span>
-                        </div>
-                        
-                        <div className="flex items-center text-gray-700">
-                          <Clock className="w-4 h-4 mr-2 text-blue-600" />
-                          <span className="text-sm">{event.time}</span>
-                        </div>
-                        
-                        <div className="flex items-center text-gray-700">
-                          <MapPin className="w-4 h-4 mr-2 text-blue-600" />
-                          <span className="text-sm">{event.location}</span>
-                        </div>
-                        
-                        <div className="flex items-center text-gray-700">
-                          <Users className="w-4 h-4 mr-2 text-blue-600" />
-                          <span className="text-sm">
-                            {event.current_participants} / {event.max_participants} participants
-                          </span>
-                        </div>
-                        
-                        <div className="flex items-center text-gray-700">
-                          <UserCheck className="w-4 h-4 mr-2 text-blue-600" />
-                          <span className="text-sm">Organizer: {event.organizer}</span>
-                        </div>
+                      {/* Event Footer */}
+                      <div className="px-6 py-4 bg-gray-100 border-t border-gray-200">
+                        <button
+                          onClick={() => router.push(`/events/${event.id}`)}
+                          className="w-full text-center text-blue-600 hover:text-blue-800 font-medium text-sm flex items-center justify-center gap-1"
+                        >
+                          View Details <ChevronRight className="w-4 h-4" />
+                        </button>
                       </div>
                     </div>
-                    
-                    {/* Event Footer */}
-                    <div className="px-6 py-4 bg-gray-100 border-t border-gray-200">
-                      <button
-                        onClick={() => router.push(`/events/${event.id}`)}
-                        className="w-full text-center text-blue-600 hover:text-blue-800 font-medium text-sm flex items-center justify-center gap-1"
-                      >
-                        View Details <ChevronRight className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'participants' && (
+          <div className="bg-white rounded-xl shadow-lg p-6">
+            <div className="flex justify-between items-center mb-6">
+              <div>
+                <h2 className="text-2xl font-bold text-gray-900">Participants Management</h2>
+                <p className="text-gray-600 mt-1">
+                  Total: {registrations.length} registrations
+                </p>
+              </div>
+              <button 
+                onClick={loadRegistrations}
+                className="text-sm text-gray-700 hover:text-gray-900 flex items-center gap-2 px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+              >
+                <RefreshCw className="w-4 h-4" />
+                Refresh
+              </button>
+            </div>
+
+            {loadingRegistrations ? (
+              <div className="text-center py-12">
+                <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-600 border-t-transparent mx-auto"></div>
+                <p className="mt-4 text-gray-600">Loading registrations...</p>
+              </div>
+            ) : registrations.length === 0 ? (
+              <div className="text-center py-12">
+                <Users className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 mb-2">No registrations yet</h3>
+                <p className="text-gray-600">Participants will appear here once they register for events</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Participant
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Event
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Registration Date
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Status
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {registrations.map((reg) => (
+                      <tr key={reg.id} className="hover:bg-gray-50">
+                        <td className="px-6 py-4">
+                          <div>
+                            <div className="font-medium text-gray-900">{reg.user_name}</div>
+                            <div className="text-sm text-gray-500">{reg.user_email}</div>
+                            <div className="text-sm text-gray-500">{reg.user_college} • {reg.user_department}</div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="text-sm text-gray-900 font-medium">{reg.events?.title || 'Event'}</div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="text-sm text-gray-900">
+                            {new Date(reg.registration_date).toLocaleDateString()}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            {new Date(reg.registration_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                            reg.status === 'attended' ? 'bg-green-100 text-green-800' :
+                            reg.status === 'cancelled' ? 'bg-red-100 text-red-800' :
+                            'bg-blue-100 text-blue-800'
+                          }`}>
+                            {reg.status}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-2">
+                            {reg.status === 'registered' && (
+                              <>
+                                <button
+                                  onClick={() => handleUpdateStatus(reg.id, 'attended')}
+                                  className="text-xs bg-green-100 text-green-800 px-3 py-1 rounded hover:bg-green-200"
+                                  title="Mark as Attended"
+                                >
+                                  Attended
+                                </button>
+                                <button
+                                  onClick={() => handleUpdateStatus(reg.id, 'cancelled')}
+                                  className="text-xs bg-yellow-100 text-yellow-800 px-3 py-1 rounded hover:bg-yellow-200"
+                                  title="Mark as Cancelled"
+                                >
+                                  Cancel
+                                </button>
+                              </>
+                            )}
+                            <button
+                              onClick={() => handleDeleteRegistration(reg.id)}
+                              className="text-xs bg-red-100 text-red-800 px-3 py-1 rounded hover:bg-red-200"
+                              title="Delete Registration"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
           </div>
-        </div>
+        )}
+
+        {activeTab === 'certificates' && (
+          <div className="bg-white rounded-xl shadow-lg p-6">
+            <div className="text-center py-12">
+              <FileText className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+              <h3 className="text-xl font-medium text-gray-900 mb-2">Certificate Management</h3>
+              <p className="text-gray-600 mb-6">Certificate generation feature coming soon</p>
+              <div className="inline-flex items-center px-4 py-2 bg-blue-100 text-blue-800 rounded-lg">
+                <Clock className="w-4 h-4 mr-2" />
+                Under Development
+              </div>
+            </div>
+          </div>
+        )}
       </main>
     </div>
-  );
-}
-
-// Add RefreshCw icon import at top or create a simple refresh icon
-function RefreshCw({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-    </svg>
   );
 }

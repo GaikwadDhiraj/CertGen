@@ -1,15 +1,20 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Calendar, Users, MapPin, Clock, Search, Filter, AlertCircle } from 'lucide-react';
+import { Calendar, Users, MapPin, Clock, Search, Filter } from 'lucide-react';
 import { fetchEvents } from '@/lib/supabaseClient';
 import { Event } from '@/types/event';
+import RegistrationModal from '@/app/components/RegistrationModal';
 
 export default function EventsPage() {
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
+  
+  // Registration modal state
+  const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
+  const [showRegistrationModal, setShowRegistrationModal] = useState(false);
 
   // Fetch events from Supabase
   useEffect(() => {
@@ -58,6 +63,29 @@ export default function EventsPage() {
   // Calculate registration percentage
   const calculatePercentage = (current: number, max: number) => {
     return Math.round((current / max) * 100);
+  };
+
+  // Handle registration
+  const handleRegisterClick = (event: Event) => {
+    // Check if event is full
+    if (event.current_participants >= event.max_participants) {
+      alert('This event is full. Please try another event.');
+      return;
+    }
+    
+    // Check if event is upcoming or active
+    if (event.status === 'completed') {
+      alert('This event has already completed.');
+      return;
+    }
+    
+    setSelectedEvent(event);
+    setShowRegistrationModal(true);
+  };
+
+  const handleRegistrationSuccess = () => {
+    // Refresh events to update participant count
+    loadEvents();
   };
 
   return (
@@ -123,7 +151,7 @@ export default function EventsPage() {
                 onClick={loadEvents}
                 className="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-2"
               >
-                <RefreshCw className="w-4 h-4" />  {/* ✅ Added here */}
+                <RefreshCw className="w-4 h-4" />
                 Refresh
               </button>
             </div>
@@ -242,11 +270,23 @@ export default function EventsPage() {
                       </div>
                       
                       {/* Register Button */}
-                      <button className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white font-medium py-3 rounded-lg hover:from-blue-700 hover:to-purple-700 transition-all duration-300 shadow hover:shadow-lg flex items-center justify-center gap-2">
-                        <span>Register for Event</span>
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                        </svg>
+                      <button 
+                        onClick={() => handleRegisterClick(event)}
+                        disabled={event.current_participants >= event.max_participants || event.status === 'completed'}
+                        className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white font-medium py-3 rounded-lg hover:from-blue-700 hover:to-purple-700 transition-all duration-300 shadow hover:shadow-lg flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {event.current_participants >= event.max_participants ? (
+                          'Event Full'
+                        ) : event.status === 'completed' ? (
+                          'Event Completed'
+                        ) : (
+                          <>
+                            <span>Register for Event</span>
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                            </svg>
+                          </>
+                        )}
                       </button>
                       
                       {/* Organizer Info */}
@@ -263,11 +303,24 @@ export default function EventsPage() {
           </>
         )}
       </div>
+
+      {/* Registration Modal */}
+      {selectedEvent && (
+        <RegistrationModal
+          event={selectedEvent}
+          isOpen={showRegistrationModal}
+          onClose={() => {
+            setShowRegistrationModal(false);
+            setSelectedEvent(null);
+          }}
+          onSuccess={handleRegistrationSuccess}
+        />
+      )}
     </div>
   );
 }
 
-// ✅ Add this RefreshCw component at the BOTTOM of the file (after the main component)
+// Refresh Icon Component
 function RefreshCw({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">

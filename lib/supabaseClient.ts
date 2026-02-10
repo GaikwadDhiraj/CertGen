@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
-import { Event, EventFormData } from '@/types/event'
+import { Event, EventFormData, Registration } from '@/types/event'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
@@ -9,6 +9,8 @@ if (!supabaseUrl || !supabaseAnonKey) {
 }
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+
+// ========== EVENT FUNCTIONS ==========
 
 // Fetch all events
 export const fetchEvents = async (): Promise<Event[]> => {
@@ -120,3 +122,162 @@ export const deleteEvent = async (id: number): Promise<boolean> => {
     return false
   }
 }
+
+// ========== REGISTRATION FUNCTIONS ==========
+
+// Register user for an event
+export const registerForEvent = async (
+  eventId: number,
+  userData: {
+    name: string;
+    email: string;
+    college: string;
+    department: string;
+  }
+): Promise<Registration | null> => {
+  try {
+    // First check if user is already registered
+    const { data: existingRegistration } = await supabase
+      .from('registrations')
+      .select('*')
+      .eq('event_id', eventId)
+      .eq('user_email', userData.email)
+      .single();
+
+    if (existingRegistration) {
+      throw new Error('You are already registered for this event');
+    }
+
+    // Create registration
+    const { data, error } = await supabase
+      .from('registrations')
+      .insert([{
+        event_id: eventId,
+        user_id: 'anonymous', // You can replace with Clerk user ID later
+        user_name: userData.name,
+        user_email: userData.email,
+        user_college: userData.college,
+        user_department: userData.department,
+        status: 'registered',
+        registration_date: new Date().toISOString()
+      }])
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    // Update event participant count
+    const newCount = await getEventParticipantCount(eventId);
+    await supabase
+      .from('events')
+      .update({ current_participants: newCount })
+      .eq('id', eventId);
+
+    return data as Registration;
+  } catch (error) {
+    console.error('Error in registerForEvent:', error);
+    throw error;
+  }
+};
+
+// Get all registrations for an event
+export const getEventRegistrations = async (eventId: number): Promise<Registration[]> => {
+  try {
+    const { data, error } = await supabase
+      .from('registrations')
+      .select('*')
+      .eq('event_id', eventId)
+      .order('registration_date', { ascending: false });
+
+    if (error) throw error;
+    return data as Registration[] || [];
+  } catch (error) {
+    console.error('Error in getEventRegistrations:', error);
+    return [];
+  }
+};
+
+// Get all registrations (for admin)
+export const getAllRegistrations = async (): Promise<any[]> => {
+  try {
+    const { data, error } = await supabase
+      .from('registrations')
+      .select('*, events(title)')
+      .order('registration_date', { ascending: false });
+
+    if (error) throw error;
+    return data || [];
+  } catch (error) {
+    console.error('Error in getAllRegistrations:', error);
+    return [];
+  }
+};
+
+// Get registration count for an event
+export const getEventParticipantCount = async (eventId: number): Promise<number> => {
+  try {
+    const { count, error } = await supabase
+      .from('registrations')
+      .select('*', { count: 'exact', head: true })
+      .eq('event_id', eventId)
+      .eq('status', 'registered');
+
+    if (error) throw error;
+    return count || 0;
+  } catch (error) {
+    console.error('Error in getEventParticipantCount:', error);
+    return 0;
+  }
+};
+
+// Delete a registration
+export const deleteRegistration = async (registrationId: number): Promise<boolean> => {
+  try {
+    // Get event ID before deleting
+    const { data: registration } = await supabase
+      .from('registrations')
+      .select('event_id')
+      .eq('id', registrationId)
+      .single();
+
+    const { error } = await supabase
+      .from('registrations')
+      .delete()
+      .eq('id', registrationId);
+
+    if (error) throw error;
+
+    // Update event participant count
+    if (registration?.event_id) {
+      const newCount = await getEventParticipantCount(registration.event_id);
+      await supabase
+        .from('events')
+        .update({ current_participants: newCount })
+        .eq('id', registration.event_id);
+    }
+
+    return true;
+  } catch (error) {
+    console.error('Error in deleteRegistration:', error);
+    return false;
+  }
+};
+
+// Update registration status (attended/cancelled)
+export const updateRegistrationStatus = async (
+  registrationId: number,
+  status: 'attended' | 'cancelled'
+): Promise<boolean> => {
+  try {
+    const { error } = await supabase
+      .from('registrations')
+      .update({ status, updated_at: new Date().toISOString() })
+      .eq('id', registrationId);
+
+    if (error) throw error;
+    return true;
+  } catch (error) {
+    console.error('Error in updateRegistrationStatus:', error);
+    return false;
+  }
+};
