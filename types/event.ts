@@ -31,3 +31,43 @@ export interface Registration {
 }
 
 export type EventFormData = Omit<Event, 'id' | 'created_at' | 'updated_at'>;
+
+// Add to your existing types/event.ts
+export interface CertificateTemplate {
+  id: number;
+  event_id: number;
+  name: string;
+  background_url: string;
+  elements: CertificateElement[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CertificateElement {
+  id: string;
+  type: 'text' | 'image' | 'rectangle' | 'circle' | 'line';
+  content: string;
+  left: number;
+  top: number;
+  fontSize?: number;
+  fontFamily?: string;
+  fontWeight?: string;
+  fill?: string;
+  width?: number;
+  height?: number;
+  angle?: number;
+  scaleX?: number;
+  scaleY?: number;
+}
+
+export interface CertificateIssue {
+  id: number;
+  certificate_id: number;
+  user_id: number;
+  user_name: string;
+  user_email: string;
+  issued_date: string;
+  issued_by: string;
+  certificate_url: string;
+  status: 'pending' | 'issued' | 'sent';
+}

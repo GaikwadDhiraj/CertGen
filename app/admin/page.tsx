@@ -2,15 +2,29 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { fetchEvents, createEvent, deleteEvent, getAllRegistrations, deleteRegistration, updateRegistrationStatus } from '@/lib/supabaseClient';
+import { fetchEvents, createEvent, deleteEvent, getAllRegistrations, deleteRegistration, updateRegistrationStatus, getEventParticipants } from '@/lib/supabaseClient';
 import { Event } from '@/types/event';
 import { 
   Calendar, Users, FileText, Settings, CheckCircle, 
   Download, Plus, BarChart3, Search, Filter, 
   Eye, Edit, Trash2, Clock, UserCheck, Mail, 
   Award, MapPin, Tag, ChevronRight, Upload,
-  X, LogOut, RefreshCw
+  X, LogOut, RefreshCw, User, Building, GraduationCap
 } from 'lucide-react';
+
+// Interface for participant
+interface Participant {
+  id: number;
+  user_name: string;
+  user_email: string;
+  user_college: string;
+  user_department: string;
+  status: string;
+  registration_date: string;
+  events: {
+    title: string;
+  };
+}
 
 export default function AdminPage() {
   const router = useRouter();
@@ -18,7 +32,6 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('events');
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedEvents, setSelectedEvents] = useState<number[]>([]);
   
   // Event form state
   const [showCreateForm, setShowCreateForm] = useState(false);
@@ -44,6 +57,12 @@ export default function AdminPage() {
   // Registrations data
   const [registrations, setRegistrations] = useState<any[]>([]);
   const [loadingRegistrations, setLoadingRegistrations] = useState(false);
+
+  // Participant modal state for specific event
+  const [showParticipantsModal, setShowParticipantsModal] = useState(false);
+  const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
+  const [eventParticipants, setEventParticipants] = useState<Participant[]>([]);
+  const [loadingParticipants, setLoadingParticipants] = useState(false);
 
   // Check admin authentication
   useEffect(() => {
@@ -93,6 +112,27 @@ export default function AdminPage() {
     } finally {
       setLoadingRegistrations(false);
     }
+  };
+
+  // Function to load participants for a specific event
+  const loadEventParticipants = async (eventId: number) => {
+    setLoadingParticipants(true);
+    try {
+      const participants = await getEventParticipants(eventId);
+      setEventParticipants(participants);
+    } catch (error) {
+      console.error('Error loading event participants:', error);
+      alert('Error loading participants');
+    } finally {
+      setLoadingParticipants(false);
+    }
+  };
+
+  // Function to handle View Details button click
+  const handleViewDetails = async (event: Event) => {
+    setSelectedEvent(event);
+    await loadEventParticipants(event.id);
+    setShowParticipantsModal(true);
   };
 
   // Handle event form changes
@@ -168,7 +208,7 @@ export default function AdminPage() {
     }
   };
 
-  // Delete registration
+  // Delete registration from participants tab
   const handleDeleteRegistration = async (id: number) => {
     if (!confirm('Are you sure you want to delete this registration?')) return;
 
@@ -187,13 +227,55 @@ export default function AdminPage() {
     }
   };
 
-  // Update registration status
+  // Delete registration from participant modal
+  const handleDeleteRegistrationFromModal = async (registrationId: number) => {
+    if (!confirm('Are you sure you want to delete this registration?')) return;
+
+    try {
+      const success = await deleteRegistration(registrationId);
+      if (success) {
+        alert('Registration deleted successfully!');
+        // Refresh the participants list
+        if (selectedEvent) {
+          await loadEventParticipants(selectedEvent.id);
+        }
+        // Also refresh events list to update participant count
+        loadEvents();
+      } else {
+        alert('Failed to delete registration');
+      }
+    } catch (error) {
+      console.error('Error deleting registration:', error);
+      alert('Error deleting registration');
+    }
+  };
+
+  // Update registration status from participants tab
   const handleUpdateStatus = async (id: number, status: 'attended' | 'cancelled') => {
     try {
       const success = await updateRegistrationStatus(id, status);
       if (success) {
         alert(`Registration marked as ${status}`);
         loadRegistrations();
+      } else {
+        alert('Failed to update status');
+      }
+    } catch (error) {
+      console.error('Error updating status:', error);
+      alert('Error updating status');
+    }
+  };
+
+  // Update registration status from participant modal
+  const handleUpdateStatusFromModal = async (registrationId: number, status: 'attended' | 'cancelled') => {
+    try {
+      const success = await updateRegistrationStatus(registrationId, status);
+      if (success) {
+        alert(`Registration marked as ${status}`);
+        // Refresh the participants list
+        if (selectedEvent) {
+          await loadEventParticipants(selectedEvent.id);
+        }
       } else {
         alert('Failed to update status');
       }
@@ -592,6 +674,188 @@ export default function AdminPage() {
           </div>
         )}
 
+        {/* Participants Modal for Specific Event */}
+        {showParticipantsModal && selectedEvent && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-y-auto">
+              <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between">
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-900">
+                    Participants for: {selectedEvent.title}
+                  </h2>
+                  <p className="text-gray-600 mt-1">
+                    Total Participants: {eventParticipants.length} • 
+                    Category: {selectedEvent.category} • 
+                    Date: {new Date(selectedEvent.date).toLocaleDateString()}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowParticipantsModal(false)}
+                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+              
+              <div className="p-6">
+                {/* Event Summary */}
+                <div className="bg-blue-50 rounded-xl p-4 mb-6">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div>
+                      <p className="text-sm text-gray-600">Event Status</p>
+                      <p className="font-medium">{selectedEvent.status}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-600">Location</p>
+                      <p className="font-medium">{selectedEvent.location}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-600">Time</p>
+                      <p className="font-medium">{selectedEvent.time}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-600">Organizer</p>
+                      <p className="font-medium">{selectedEvent.organizer}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {loadingParticipants ? (
+                  <div className="text-center py-12">
+                    <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-600 border-t-transparent mx-auto"></div>
+                    <p className="mt-4 text-gray-600">Loading participants...</p>
+                  </div>
+                ) : eventParticipants.length === 0 ? (
+                  <div className="text-center py-12">
+                    <Users className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">No participants yet</h3>
+                    <p className="text-gray-600">No one has registered for this event yet.</p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            #
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Participant Info
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            College & Department
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Registration Date
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Status
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Actions
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200">
+                        {eventParticipants.map((participant, index) => (
+                          <tr key={participant.id} className="hover:bg-gray-50">
+                            <td className="px-6 py-4 text-sm text-gray-500">
+                              {index + 1}
+                            </td>
+                            <td className="px-6 py-4">
+                              <div className="flex items-center">
+                                <div className="flex-shrink-0 h-10 w-10 bg-blue-100 rounded-full flex items-center justify-center">
+                                  <User className="h-6 w-6 text-blue-600" />
+                                </div>
+                                <div className="ml-4">
+                                  <div className="font-medium text-gray-900">{participant.user_name}</div>
+                                  <div className="text-sm text-gray-500 flex items-center">
+                                    <Mail className="w-3 h-3 mr-1" />
+                                    {participant.user_email}
+                                  </div>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4">
+                              <div className="text-sm text-gray-900 flex items-center">
+                                <Building className="w-4 h-4 mr-2 text-blue-600" />
+                                {participant.user_college}
+                              </div>
+                              <div className="text-sm text-gray-500 flex items-center mt-1">
+                                <GraduationCap className="w-4 h-4 mr-2 text-green-600" />
+                                {participant.user_department}
+                              </div>
+                            </td>
+                            <td className="px-6 py-4">
+                              <div className="text-sm text-gray-900">
+                                {new Date(participant.registration_date).toLocaleDateString()}
+                              </div>
+                              <div className="text-xs text-gray-500">
+                                {new Date(participant.registration_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              </div>
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                                participant.status === 'attended' ? 'bg-green-100 text-green-800' :
+                                participant.status === 'cancelled' ? 'bg-red-100 text-red-800' :
+                                'bg-blue-100 text-blue-800'
+                              }`}>
+                                {participant.status}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4">
+                              <div className="flex items-center gap-2">
+                                {participant.status === 'registered' && (
+                                  <>
+                                    <button
+                                      onClick={() => handleUpdateStatusFromModal(participant.id, 'attended')}
+                                      className="text-xs bg-green-100 text-green-800 px-3 py-1 rounded hover:bg-green-200 transition-colors"
+                                      title="Mark as Attended"
+                                    >
+                                      Attended
+                                    </button>
+                                    <button
+                                      onClick={() => handleUpdateStatusFromModal(participant.id, 'cancelled')}
+                                      className="text-xs bg-yellow-100 text-yellow-800 px-3 py-1 rounded hover:bg-yellow-200 transition-colors"
+                                      title="Mark as Cancelled"
+                                    >
+                                      Cancel
+                                    </button>
+                                  </>
+                                )}
+                                <button
+                                  onClick={() => handleDeleteRegistrationFromModal(participant.id)}
+                                  className="text-xs bg-red-100 text-red-800 px-3 py-1 rounded hover:bg-red-200 transition-colors"
+                                  title="Delete Registration"
+                                >
+                                  Delete
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {/* Export Button */}
+                <div className="mt-6 flex justify-end">
+                  <button
+                    onClick={() => {
+                      alert('Export feature coming soon!');
+                    }}
+                    className="px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:from-blue-700 hover:to-purple-700 transition-all flex items-center gap-2"
+                  >
+                    <Download className="w-4 h-4" />
+                    Export to CSV
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Tab Content */}
         {activeTab === 'events' && (
           <div className="bg-white rounded-xl shadow-lg overflow-hidden">
@@ -734,12 +998,21 @@ export default function AdminPage() {
                       </div>
                       
                       {/* Event Footer */}
-                      <div className="px-6 py-4 bg-gray-100 border-t border-gray-200">
+                      <div className="px-6 py-4 bg-gray-100 border-t border-gray-200 flex justify-between">
+                        <button
+                          onClick={() => handleViewDetails(event)}
+                          className="text-center text-blue-600 hover:text-blue-800 font-medium text-sm flex items-center gap-1"
+                        >
+                          <Eye className="w-4 h-4" />
+                          View Participants
+                        </button>
+                        
                         <button
                           onClick={() => router.push(`/events/${event.id}`)}
-                          className="w-full text-center text-blue-600 hover:text-blue-800 font-medium text-sm flex items-center justify-center gap-1"
+                          className="text-center text-gray-600 hover:text-gray-800 font-medium text-sm flex items-center gap-1"
                         >
-                          View Details <ChevronRight className="w-4 h-4" />
+                          Event Page
+                          <ChevronRight className="w-4 h-4" />
                         </button>
                       </div>
                     </div>

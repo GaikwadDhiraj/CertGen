@@ -153,7 +153,7 @@ export const registerForEvent = async (
       .from('registrations')
       .insert([{
         event_id: eventId,
-        user_id: 'anonymous', // You can replace with Clerk user ID later
+        user_id: 'anonymous',
         user_name: userData.name,
         user_email: userData.email,
         user_college: userData.college,
@@ -177,6 +177,32 @@ export const registerForEvent = async (
   } catch (error) {
     console.error('Error in registerForEvent:', error);
     throw error;
+  }
+};
+
+// Get participants for a specific event with their details
+export const getEventParticipants = async (eventId: number): Promise<any[]> => {
+  try {
+    const { data, error } = await supabase
+      .from('registrations')
+      .select(`
+        id,
+        user_name,
+        user_email,
+        user_college,
+        user_department,
+        status,
+        registration_date,
+        events!inner(title)
+      `)
+      .eq('event_id', eventId)
+      .order('registration_date', { ascending: false });
+
+    if (error) throw error;
+    return data || [];
+  } catch (error) {
+    console.error('Error in getEventParticipants:', error);
+    return [];
   }
 };
 
