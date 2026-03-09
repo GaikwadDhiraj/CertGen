@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { fetchEvents, createEvent, deleteEvent, getAllRegistrations, deleteRegistration, updateRegistrationStatus, getEventParticipants } from '@/lib/supabaseClient';
 import { Event } from '@/types/event';
+import CertificateManager from '@/app/components/CertificateManager';
 import { 
   Calendar, Users, FileText, Settings, CheckCircle, 
   Download, Plus, BarChart3, Search, Filter, 
@@ -1142,19 +1143,66 @@ export default function AdminPage() {
           </div>
         )}
 
-        {activeTab === 'certificates' && (
-          <div className="bg-white rounded-xl shadow-lg p-6">
-            <div className="text-center py-12">
-              <FileText className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-              <h3 className="text-xl font-medium text-gray-900 mb-2">Certificate Management</h3>
-              <p className="text-gray-600 mb-6">Certificate generation feature coming soon</p>
-              <div className="inline-flex items-center px-4 py-2 bg-blue-100 text-blue-800 rounded-lg">
-                <Clock className="w-4 h-4 mr-2" />
-                Under Development
-              </div>
-            </div>
-          </div>
-        )}
+        
+{activeTab === 'certificates' && (
+  <div className="bg-white rounded-xl shadow-lg overflow-hidden">
+    <div className="p-6">
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900">Certificate Management</h2>
+          <p className="text-gray-600 mt-1">Create and manage certificate templates</p>
+        </div>
+        <button
+          onClick={() => router.push('/admin/certificates')}
+          className="px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:from-blue-700 hover:to-purple-700 flex items-center gap-2"
+        >
+          <FileText className="w-4 h-4" />
+          Manage Certificates
+        </button>
+      </div>
+
+      {/* Quick Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div className="bg-blue-50 rounded-xl p-6">
+          <FileText className="w-8 h-8 text-blue-600 mb-3" />
+          <p className="text-2xl font-bold text-gray-900">0</p>
+          <p className="text-gray-600">Templates</p>
+        </div>
+        <div className="bg-green-50 rounded-xl p-6">
+          <Award className="w-8 h-8 text-green-600 mb-3" />
+          <p className="text-2xl font-bold text-gray-900">0</p>
+          <p className="text-gray-600">Certificates Issued</p>
+        </div>
+        <div className="bg-purple-50 rounded-xl p-6">
+          <Users className="w-8 h-8 text-purple-600 mb-3" />
+          <p className="text-2xl font-bold text-gray-900">0</p>
+          <p className="text-gray-600">Eligible Participants</p>
+        </div>
+      </div>
+
+      {/* Quick Actions */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <button
+          onClick={() => router.push('/admin/certificates')}
+          className="p-6 border-2 border-dashed border-gray-300 rounded-xl hover:border-blue-500 hover:bg-blue-50 transition-all text-center"
+        >
+          <Plus className="w-8 h-8 text-gray-400 mx-auto mb-3" />
+          <p className="font-medium text-gray-900">Create New Template</p>
+          <p className="text-sm text-gray-600 mt-1">Design a custom certificate template</p>
+        </button>
+        
+        <button
+          onClick={() => router.push('/admin/certificates')}
+          className="p-6 border-2 border-dashed border-gray-300 rounded-xl hover:border-green-500 hover:bg-green-50 transition-all text-center"
+        >
+          <Upload className="w-8 h-8 text-gray-400 mx-auto mb-3" />
+          <p className="font-medium text-gray-900">Upload Existing</p>
+          <p className="text-sm text-gray-600 mt-1">Upload a certificate image or PDF</p>
+        </button>
+      </div>
+    </div>
+  </div>
+)}
       </main>
     </div>
   );

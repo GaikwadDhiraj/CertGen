@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
-import { Event, EventFormData, Registration } from '@/types/event'
+import { Event, EventFormData, Registration, CertificateElement, CertificateTemplate } from '@/types/event'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
@@ -305,5 +305,146 @@ export const updateRegistrationStatus = async (
   } catch (error) {
     console.error('Error in updateRegistrationStatus:', error);
     return false;
+  }
+};
+
+// ========== CERTIFICATE FUNCTIONS ==========
+
+// Create certificate template
+export const createCertificateTemplate = async (
+  eventId: number,
+  templateData: {
+    name: string;
+    background_url: string;
+    elements: CertificateElement[];
+  }
+): Promise<any> => {
+  try {
+    const { data, error } = await supabase
+      .from('certificate_templates')
+      .insert([{
+        event_id: eventId,
+        name: templateData.name,
+        background_url: templateData.background_url,
+        elements: templateData.elements,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }])
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  } catch (error) {
+    console.error('Error creating certificate template:', error);
+    return null;
+  }
+};
+
+// Get certificate template for an event
+export const getCertificateTemplate = async (eventId: number): Promise<any> => {
+  try {
+    const { data, error } = await supabase
+      .from('certificate_templates')
+      .select('*')
+      .eq('event_id', eventId)
+      .single();
+
+    if (error) {
+      // Return null if no template exists
+      if (error.code === 'PGRST116') {
+        return null;
+      }
+      throw error;
+    }
+    return data;
+  } catch (error) {
+    console.error('Error fetching certificate template:', error);
+    return null;
+  }
+};
+
+// Update certificate template
+export const updateCertificateTemplate = async (
+  templateId: number,
+  templateData: Partial<CertificateTemplate>
+): Promise<boolean> => {
+  try {
+    const { error } = await supabase
+      .from('certificate_templates')
+      .update({
+        ...templateData,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', templateId);
+
+    if (error) throw error;
+    return true;
+  } catch (error) {
+    console.error('Error updating certificate template:', error);
+    return false;
+  }
+};
+
+// Delete certificate template
+export const deleteCertificateTemplate = async (templateId: number): Promise<boolean> => {
+  try {
+    const { error } = await supabase
+      .from('certificate_templates')
+      .delete()
+      .eq('id', templateId);
+
+    if (error) throw error;
+    return true;
+  } catch (error) {
+    console.error('Error deleting certificate template:', error);
+    return false;
+  }
+};
+
+// Issue certificate to participant
+export const issueCertificate = async (
+  certificateId: number,
+  userId: number,
+  userName: string,
+  userEmail: string
+): Promise<boolean> => {
+  try {
+    const { error } = await supabase
+      .from('certificate_issues')
+      .insert([{
+        certificate_id: certificateId,
+        user_id: userId,
+        user_name: userName,
+        user_email: userEmail,
+        issued_date: new Date().toISOString(),
+        issued_by: 'Admin',
+        status: 'issued'
+      }]);
+
+    if (error) throw error;
+    return true;
+  } catch (error) {
+    console.error('Error issuing certificate:', error);
+    return false;
+  }
+};
+
+// Get issued certificates for an event
+export const getIssuedCertificates = async (eventId: number): Promise<any[]> => {
+  try {
+    const { data, error } = await supabase
+      .from('certificate_issues')
+      .select(`
+        *,
+        certificate_templates!inner(event_id)
+      `)
+      .eq('certificate_templates.event_id', eventId);
+
+    if (error) throw error;
+    return data || [];
+  } catch (error) {
+    console.error('Error fetching issued certificates:', error);
+    return [];
   }
 };
