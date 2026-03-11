@@ -48,39 +48,47 @@ export interface Registration {
   updated_at?: string;
 }
 
+// Add to your existing types/event.ts
+
 export interface CertificateTemplate {
   id: number;
   name: string;
   description?: string;
-  background_url: string;
+  background_url: string;  // The uploaded certificate image
   background_type: 'image' | 'pdf';
   width: number;
   height: number;
-  fields: CertificateField[];
+  fields: CertificateField[];  // The marked fields/blank spaces
   created_at: string;
   updated_at: string;
-  created_by?: string;
-  thumbnail_url?: string;
+  event_id?: number;  // Optional: link to specific event
 }
 
 export interface CertificateField {
   id: string;
-  type: 'text' | 'date' | 'qr' | 'barcode' | 'signature' | 'image';
-  label: string;
-  placeholder: string;
-  field_key: 'name' | 'email' | 'event_name' | 'event_date' | 'issue_date' | 'certificate_id' | 'custom';
-  default_value?: string;
-  x: number;
+  type: 'text' | 'date' | 'qr' | 'signature';
+  label: string;  // Display name (e.g., "Participant Name")
+  field_key: 'name' | 'email' | 'college' | 'department' | 'event_name' | 'event_date' | 'result' | 'custom';
+  x: number;  // Position on image
   y: number;
   width: number;
   height: number;
   fontSize?: number;
   fontFamily?: string;
-  fontWeight?: 'normal' | 'bold' | 'light';
   color?: string;
   textAlign?: 'left' | 'center' | 'right';
-  required: boolean;
-  validation?: string;
+  defaultValue?: string;  // For static text
+}
+
+// For storing generated certificates
+export interface GeneratedCertificate {
+  id: number;
+  event_id: number;
+  template_id: number;
+  registration_id: number;
+  participant_name: string;
+  certificate_url: string;
+  generated_at: string;
 }
 
 export interface EventCertificate {

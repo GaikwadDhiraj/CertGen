@@ -52,37 +52,106 @@ export default function CertificateManagementPage() {
     }
   };
 
-  const handleSaveTemplate = async (templateData: any) => {
-    try {
-      if (selectedTemplate) {
-        // Update existing template
-        const { error } = await supabase
-          .from('certificate_templates')
-          .update(templateData)
-          .eq('id', selectedTemplate.id);
+  // app/admin/certificates/page.tsx - Updated handleSaveTemplate
 
-        if (error) throw error;
-      } else {
-        // Create new template
-        const { error } = await supabase
-          .from('certificate_templates')
-          .insert([{
-            ...templateData,
-            created_at: new Date().toISOString()
-          }]);
-
-        if (error) throw error;
-      }
-
-      alert('Template saved successfully!');
-      setShowDesigner(false);
-      setSelectedTemplate(null);
-      loadData();
-    } catch (error) {
-      console.error('Error saving template:', error);
-      alert('Error saving template');
+const handleSaveTemplate = async (templateData: any) => {
+  try {
+    console.log('=== Starting template save ===');
+    console.log('Template data received:', JSON.stringify(templateData, null, 2));
+    
+    // Validate required fields
+    if (!templateData.name) {
+      alert('Template name is required');
+      return;
     }
-  };
+    
+    if (!templateData.background_url) {
+      alert('Background image is required');
+      return;
+    }
+
+    // Prepare data for Supabase
+    const templateToSave = {
+      name: templateData.name,
+      description: templateData.description || '',
+      background_url: templateData.background_url,
+      background_type: templateData.background_type || 'image',
+      width: templateData.width || 800,
+      height: templateData.height || 600,
+      fields: templateData.fields || [],
+      updated_at: new Date().toISOString()
+    };
+
+    console.log('Data prepared for Supabase:', JSON.stringify(templateToSave, null, 2));
+
+    let result;
+    
+    if (selectedTemplate) {
+      // Update existing template
+      console.log('Updating template with ID:', selectedTemplate.id);
+      
+      result = await supabase
+        .from('certificate_templates')
+        .update(templateToSave)
+        .eq('id', selectedTemplate.id)
+        .select();
+
+      console.log('Update result:', result);
+    } else {
+      // Create new template
+      console.log('Creating new template');
+      
+      result = await supabase
+        .from('certificate_templates')
+        .insert([{
+          ...templateToSave,
+          created_at: new Date().toISOString()
+        }])
+        .select();
+
+      console.log('Insert result:', result);
+    }
+
+    // Check for errors
+    if (result.error) {
+      console.error('Supabase error details:', {
+        message: result.error.message,
+        details: result.error.details,
+        hint: result.error.hint,
+        code: result.error.code
+      });
+      
+      // Show specific error message
+      let errorMsg = 'Database error: ';
+      if (result.error.message) errorMsg += result.error.message;
+      if (result.error.details) errorMsg += `\nDetails: ${result.error.details}`;
+      if (result.error.hint) errorMsg += `\nHint: ${result.error.hint}`;
+      
+      alert(errorMsg);
+      return;
+    }
+
+    console.log('Operation successful, data:', result.data);
+    alert(selectedTemplate ? 'Template updated successfully!' : 'Template created successfully!');
+
+    setShowDesigner(false);
+    setSelectedTemplate(null);
+    await loadData();
+    
+  } catch (error: any) {
+    console.error('=== Error in handleSaveTemplate ===');
+    console.error('Error object:', error);
+    console.error('Error message:', error.message);
+    console.error('Error stack:', error.stack);
+    
+    // Try to get more details
+    if (error.details) console.error('Error details:', error.details);
+    if (error.hint) console.error('Error hint:', error.hint);
+    if (error.code) console.error('Error code:', error.code);
+    
+    alert(`Error saving template: ${error.message || 'Unknown error'}`);
+  }
+};
 
   const handleDeleteTemplate = async (templateId: number) => {
     if (!confirm('Are you sure you want to delete this template?')) return;

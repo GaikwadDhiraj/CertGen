@@ -1,33 +1,26 @@
+// app/components/CertificateTemplateDesigner.tsx
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
 import { 
   Upload, Save, Download, Trash2, Plus, X, Move, 
-  Type, Calendar, QrCode, Image, PenTool, Hash,
-  ChevronLeft, ChevronRight, Grid, Maximize2, Minimize2,
-  Copy, Eye, EyeOff, Settings, FileText, Users, Mail,
-  Check, AlertCircle, Clock
+  Type, Calendar, QrCode, PenTool, ChevronLeft,
+  Grid, Maximize2, Minimize2, Eye, EyeOff, Settings,
+  FileText, Image as ImageIcon
 } from 'lucide-react';
 import CertificateFieldMarker from './CertificateFieldMarker';
-import { CertificateTemplate, CertificateField } from '@/types/event';
-
-interface TemplateDesignerProps {
-  template?: CertificateTemplate | null;
-  onSave: (template: Partial<CertificateTemplate>) => void;
-  onClose: () => void;
-}
 
 export default function CertificateTemplateDesigner({ 
   template, 
   onSave, 
   onClose 
-}: TemplateDesignerProps) {
-  const [name, setName] = useState(template?.name || 'New Certificate Template');
+}) {
+  const [name, setName] = useState(template?.name || '');
   const [description, setDescription] = useState(template?.description || '');
   const [backgroundUrl, setBackgroundUrl] = useState(template?.background_url || '');
-  const [backgroundType, setBackgroundType] = useState<'image' | 'pdf'>(template?.background_type || 'image');
-  const [fields, setFields] = useState<CertificateField[]>(template?.fields || []);
-  const [selectedFieldId, setSelectedFieldId] = useState<string | null>(null);
+  const [backgroundType, setBackgroundType] = useState(template?.background_type || 'image');
+  const [fields, setFields] = useState(template?.fields || []);
+  const [selectedFieldId, setSelectedFieldId] = useState(null);
   const [canvasSize, setCanvasSize] = useState({ 
     width: template?.width || 800, 
     height: template?.height || 600 
@@ -37,16 +30,24 @@ export default function CertificateTemplateDesigner({
   const [isDragging, setIsDragging] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
-  const [activeTab, setActiveTab] = useState<'fields' | 'settings' | 'preview'>('fields');
   const [previewMode, setPreviewMode] = useState(false);
+  const [imageLoaded, setImageLoaded] = useState(false);
   
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const canvasRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef(null);
+  const canvasRef = useRef(null);
+  const containerRef = useRef(null);
 
   // Handle file upload
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    // Check file type
+    const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp', 'application/pdf'];
+    if (!validTypes.includes(file.type)) {
+      alert('Please upload a valid image file (JPG, PNG, GIF, WEBP) or PDF');
+      return;
+    }
 
     setIsUploading(true);
     setUploadProgress(0);
@@ -65,14 +66,15 @@ export default function CertificateTemplateDesigner({
     // Read file as data URL
     const reader = new FileReader();
     reader.onload = (event) => {
-      const img = new Image();
-      img.onload = () => {
+      if (file.type === 'application/pdf') {
+        // For PDFs, we'll use a default size
         setCanvasSize({
-          width: img.width,
-          height: img.height
+          width: 800,
+          height: 600
         });
-        setBackgroundUrl(event.target?.result as string);
-        setBackgroundType(file.type === 'application/pdf' ? 'pdf' : 'image');
+        setBackgroundUrl(event.target?.result);
+        setBackgroundType('pdf');
+        setImageLoaded(true);
         
         setTimeout(() => {
           clearInterval(interval);
@@ -81,31 +83,55 @@ export default function CertificateTemplateDesigner({
             setIsUploading(false);
             setUploadProgress(0);
           }, 500);
-        }, 1000);
-      };
-      img.src = event.target?.result as string;
+        }, 500);
+      } else {
+        // For images, get actual dimensions
+        const img = new Image();
+        img.onload = () => {
+          setCanvasSize({
+            width: img.width,
+            height: img.height
+          });
+          setBackgroundUrl(event.target?.result);
+          setBackgroundType('image');
+          setImageLoaded(true);
+          
+          setTimeout(() => {
+            clearInterval(interval);
+            setUploadProgress(100);
+            setTimeout(() => {
+              setIsUploading(false);
+              setUploadProgress(0);
+            }, 500);
+          }, 500);
+        };
+        img.src = event.target?.result;
+      }
     };
     reader.readAsDataURL(file);
   };
 
   // Add new field
-  const addField = (type: string) => {
-    const newField: CertificateField = {
+  const addField = (type) => {
+    if (!backgroundUrl) {
+      alert('Please upload a certificate image first');
+      return;
+    }
+
+    const newField = {
       id: `field_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      type: type as any,
-      label: `New ${type} field`,
-      placeholder: type === 'text' ? 'Enter text' : '',
+      type: type,
+      label: type === 'text' ? 'New Field' : 'New Field',
       field_key: 'name',
       x: 100,
       y: 100,
-      width: 200,
+      width: type === 'text' ? 200 : 80,
       height: type === 'text' ? 40 : 80,
-      fontSize: type === 'text' ? 24 : undefined,
-      fontFamily: type === 'text' ? 'Arial' : undefined,
-      fontWeight: type === 'text' ? 'normal' : undefined,
-      color: type === 'text' ? '#000000' : undefined,
-      textAlign: type === 'text' ? 'center' : undefined,
-      required: true,
+      fontSize: 16,
+      fontFamily: 'Arial',
+      color: '#000000',
+      textAlign: 'center',
+      required: true
     };
     
     setFields([...fields, newField]);
@@ -113,14 +139,14 @@ export default function CertificateTemplateDesigner({
   };
 
   // Update field
-  const updateField = (fieldId: string, updates: Partial<CertificateField>) => {
+  const updateField = (fieldId, updates) => {
     setFields(fields.map(field => 
       field.id === fieldId ? { ...field, ...updates } : field
     ));
   };
 
   // Delete field
-  const deleteField = (fieldId: string) => {
+  const deleteField = (fieldId) => {
     setFields(fields.filter(field => field.id !== fieldId));
     if (selectedFieldId === fieldId) {
       setSelectedFieldId(null);
@@ -128,42 +154,60 @@ export default function CertificateTemplateDesigner({
   };
 
   // Handle save
-  const handleSave = () => {
-    if (!name) {
-      alert('Please enter a template name');
-      return;
-    }
-    
-    if (!backgroundUrl) {
-      alert('Please upload a certificate background');
-      return;
-    }
+  const handleSave = async () => {
+    try {
+      if (!name) {
+        alert('Please enter a template name');
+        return;
+      }
+      
+      if (!backgroundUrl) {
+        alert('Please upload a certificate image');
+        return;
+      }
 
-    const templateData: Partial<CertificateTemplate> = {
-      name,
-      description,
-      background_url: backgroundUrl,
-      background_type: backgroundType,
-      width: canvasSize.width,
-      height: canvasSize.height,
-      fields,
-      updated_at: new Date().toISOString()
-    };
+      if (fields.length === 0) {
+        alert('Please add at least one field');
+        return;
+      }
 
-    onSave(templateData);
+      const templateData = {
+        name,
+        description,
+        background_url: backgroundUrl,
+        background_type: backgroundType,
+        width: canvasSize.width,
+        height: canvasSize.height,
+        fields: fields,
+        updated_at: new Date().toISOString()
+      };
+
+      await onSave(templateData);
+    } catch (error) {
+      console.error('Error in handleSave:', error);
+      alert('Error saving template: ' + (error.message || 'Unknown error'));
+    }
   };
 
-  // Generate preview data
-  const getPreviewData = (field: CertificateField) => {
-    switch (field.field_key) {
+  // Get sample preview data for a field
+  const getPreviewData = (field) => {
+    switch(field.field_key) {
       case 'name': return 'John Doe';
-      case 'email': return 'john@example.com';
-      case 'event_name': return 'Tech Conference 2024';
-      case 'event_date': return 'March 15, 2024';
-      case 'issue_date': return new Date().toLocaleDateString();
+      case 'email': return 'john.doe@example.com';
+      case 'college': return 'SVERI College of Engineering';
+      case 'department': return 'Computer Science';
+      case 'event_name': return 'SPIRIT 2K24';
+      case 'event_date': return '04 April 2024';
+      case 'event_time': return '10:00 AM';
+      case 'event_location': return 'Main Auditorium';
+      case 'event_category': return 'Technical Event';
+      case 'event_organizer': return 'Department of CSE';
+      case 'result': return 'Winner';
+      case 'position': return '1st';
       case 'certificate_id': return 'CERT-2024-001';
-      case 'custom': return field.default_value || 'Custom Text';
-      default: return field.placeholder || 'Sample Text';
+      case 'issue_date': return new Date().toLocaleDateString();
+      case 'custom': return field.defaultValue || 'Custom Text';
+      default: return 'Sample Text';
     }
   };
 
@@ -184,31 +228,25 @@ export default function CertificateTemplateDesigner({
               value={name}
               onChange={(e) => setName(e.target.value)}
               className="text-xl font-bold border-none focus:outline-none focus:ring-2 focus:ring-blue-500 rounded-lg px-3 py-1"
-              placeholder="Template Name"
+              placeholder="Template Name (e.g., SPIRIT 2K24 Certificate)"
             />
             <input
               type="text"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               className="text-sm text-gray-600 border-none focus:outline-none focus:ring-2 focus:ring-blue-500 rounded-lg px-3 py-1 mt-1 w-full"
-              placeholder="Template Description (optional)"
+              placeholder="Description (optional)"
             />
           </div>
         </div>
 
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
-            <button
-              onClick={() => setZoom(Math.max(0.5, zoom - 0.1))}
-              className="p-2 hover:bg-white rounded"
-            >
+            <button onClick={() => setZoom(Math.max(0.5, zoom - 0.1))} className="p-2 hover:bg-white rounded">
               <Minimize2 className="w-4 h-4" />
             </button>
             <span className="px-2 text-sm">{Math.round(zoom * 100)}%</span>
-            <button
-              onClick={() => setZoom(Math.min(2, zoom + 0.1))}
-              className="p-2 hover:bg-white rounded"
-            >
+            <button onClick={() => setZoom(Math.min(2, zoom + 0.1))} className="p-2 hover:bg-white rounded">
               <Maximize2 className="w-4 h-4" />
             </button>
           </div>
@@ -246,71 +284,72 @@ export default function CertificateTemplateDesigner({
             <div className="grid grid-cols-2 gap-2">
               <button
                 onClick={() => addField('text')}
-                className="p-3 border border-gray-200 rounded-lg hover:bg-blue-50 hover:border-blue-300 transition-colors flex flex-col items-center gap-1"
+                disabled={!backgroundUrl}
+                className={`p-3 border rounded-lg transition-colors flex flex-col items-center gap-1 ${
+                  backgroundUrl 
+                    ? 'border-gray-200 hover:bg-blue-50 hover:border-blue-300' 
+                    : 'border-gray-200 bg-gray-100 cursor-not-allowed opacity-50'
+                }`}
               >
                 <Type className="w-5 h-5" />
                 <span className="text-xs">Text</span>
               </button>
               <button
-                onClick={() => addField('date')}
-                className="p-3 border border-gray-200 rounded-lg hover:bg-blue-50 hover:border-blue-300 transition-colors flex flex-col items-center gap-1"
-              >
-                <Calendar className="w-5 h-5" />
-                <span className="text-xs">Date</span>
-              </button>
-              <button
                 onClick={() => addField('qr')}
-                className="p-3 border border-gray-200 rounded-lg hover:bg-blue-50 hover:border-blue-300 transition-colors flex flex-col items-center gap-1"
+                disabled={!backgroundUrl}
+                className={`p-3 border rounded-lg transition-colors flex flex-col items-center gap-1 ${
+                  backgroundUrl 
+                    ? 'border-gray-200 hover:bg-blue-50 hover:border-blue-300' 
+                    : 'border-gray-200 bg-gray-100 cursor-not-allowed opacity-50'
+                }`}
               >
                 <QrCode className="w-5 h-5" />
                 <span className="text-xs">QR Code</span>
-              </button>
-              <button
-                onClick={() => addField('signature')}
-                className="p-3 border border-gray-200 rounded-lg hover:bg-blue-50 hover:border-blue-300 transition-colors flex flex-col items-center gap-1"
-              >
-                <PenTool className="w-5 h-5" />
-                <span className="text-xs">Signature</span>
               </button>
             </div>
           </div>
 
           <div className="flex-1 overflow-y-auto p-4">
             <h3 className="font-medium text-gray-900 mb-3">Fields List</h3>
-            <div className="space-y-2">
-              {fields.map((field) => (
-                <button
-                  key={field.id}
-                  onClick={() => setSelectedFieldId(field.id)}
-                  className={`w-full p-3 border rounded-lg text-left transition-colors ${
-                    selectedFieldId === field.id
-                      ? 'border-blue-500 bg-blue-50'
-                      : 'border-gray-200 hover:border-blue-300 hover:bg-gray-50'
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      {field.type === 'text' && <Type className="w-4 h-4" />}
-                      {field.type === 'date' && <Calendar className="w-4 h-4" />}
-                      {field.type === 'qr' && <QrCode className="w-4 h-4" />}
-                      {field.type === 'signature' && <PenTool className="w-4 h-4" />}
-                      <span className="text-sm font-medium">{field.label}</span>
+            {fields.length === 0 ? (
+              <p className="text-sm text-gray-500 text-center py-8">
+                No fields added yet.<br/>Click above to add fields.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {fields.map((field) => (
+                  <button
+                    key={field.id}
+                    onClick={() => setSelectedFieldId(field.id)}
+                    className={`w-full p-3 border rounded-lg text-left transition-colors ${
+                      selectedFieldId === field.id
+                        ? 'border-blue-500 bg-blue-50'
+                        : 'border-gray-200 hover:border-blue-300 hover:bg-gray-50'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        {field.type === 'text' && <Type className="w-4 h-4" />}
+                        {field.type === 'qr' && <QrCode className="w-4 h-4" />}
+                        <span className="text-sm font-medium truncate">{field.label}</span>
+                      </div>
+                      <span className="text-xs text-gray-500">{field.field_key}</span>
                     </div>
-                    <span className="text-xs text-gray-500">{field.field_key}</span>
-                  </div>
-                </button>
-              ))}
-            </div>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
         {/* Center - Canvas Area */}
         <div 
-          ref={canvasRef}
+          ref={containerRef}
           className="flex-1 p-8 overflow-auto bg-gray-100 flex items-center justify-center"
           onClick={() => setSelectedFieldId(null)}
         >
           <div 
+            ref={canvasRef}
             className="relative bg-white shadow-2xl"
             style={{
               width: canvasSize.width * zoom,
@@ -323,28 +362,28 @@ export default function CertificateTemplateDesigner({
             {backgroundUrl ? (
               <img
                 src={backgroundUrl}
-                alt="Certificate Background"
+                alt="Certificate Template"
                 className="absolute inset-0 w-full h-full object-contain"
                 style={{ pointerEvents: 'none' }}
               />
             ) : (
               <div className="absolute inset-0 bg-gray-50 border-2 border-dashed border-gray-300 flex items-center justify-center">
                 <div className="text-center">
-                  <Upload className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-                  <p className="text-gray-600 mb-2">Upload Certificate Background</p>
+                  <ImageIcon className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+                  <p className="text-gray-600 mb-2">Upload your certificate image</p>
                   <p className="text-gray-400 text-sm">Click the upload button on the right</p>
                 </div>
               </div>
             )}
 
             {/* Grid Overlay */}
-            {showGrid && (
+            {showGrid && backgroundUrl && (
               <div 
                 className="absolute inset-0 pointer-events-none"
                 style={{
                   backgroundImage: `
-                    linear-gradient(to right, rgba(0,0,0,0.1) 1px, transparent 1px),
-                    linear-gradient(to bottom, rgba(0,0,0,0.1) 1px, transparent 1px)
+                    linear-gradient(to right, rgba(0,0,255,0.1) 1px, transparent 1px),
+                    linear-gradient(to bottom, rgba(0,0,255,0.1) 1px, transparent 1px)
                   `,
                   backgroundSize: '20px 20px'
                 }}
@@ -362,6 +401,7 @@ export default function CertificateTemplateDesigner({
                 onDelete={() => deleteField(field.id)}
                 canvasWidth={canvasSize.width}
                 canvasHeight={canvasSize.height}
+                backgroundImage={backgroundUrl}
               />
             ))}
 
@@ -369,7 +409,7 @@ export default function CertificateTemplateDesigner({
             {previewMode && fields.map((field) => (
               <div
                 key={field.id}
-                className="absolute pointer-events-none"
+                className="absolute pointer-events-none bg-white bg-opacity-30 border border-dashed border-blue-500"
                 style={{
                   left: field.x,
                   top: field.y,
@@ -380,11 +420,9 @@ export default function CertificateTemplateDesigner({
                   justifyContent: field.textAlign || 'center',
                   fontSize: field.fontSize || 16,
                   fontFamily: field.fontFamily || 'Arial',
-                  fontWeight: field.fontWeight || 'normal',
                   color: field.color || '#000000',
                   textAlign: field.textAlign || 'center',
-                  backgroundColor: 'rgba(255,255,255,0.5)',
-                  border: '1px dashed #ccc'
+                  padding: '4px'
                 }}
               >
                 {getPreviewData(field)}
@@ -396,7 +434,7 @@ export default function CertificateTemplateDesigner({
         {/* Right Sidebar - Upload & Settings */}
         <div className="w-80 bg-white border-l overflow-y-auto">
           <div className="p-4 border-b">
-            <h3 className="font-medium text-gray-900 mb-3">Certificate Background</h3>
+            <h3 className="font-medium text-gray-900 mb-3">1. Upload Certificate</h3>
             
             {/* Upload Area */}
             <div 
@@ -412,13 +450,13 @@ export default function CertificateTemplateDesigner({
                 e.preventDefault();
                 setIsDragging(false);
                 const file = e.dataTransfer.files[0];
-                if (file && (file.type.startsWith('image/') || file.type === 'application/pdf')) {
+                if (file) {
                   const input = fileInputRef.current;
                   if (input) {
                     const dataTransfer = new DataTransfer();
                     dataTransfer.items.add(file);
                     input.files = dataTransfer.files;
-                    handleFileUpload({ target: { files: input.files } } as any);
+                    handleFileUpload({ target: { files: input.files } });
                   }
                 }
               }}
@@ -450,11 +488,14 @@ export default function CertificateTemplateDesigner({
                     alt="Preview" 
                     className="max-h-32 mx-auto rounded border"
                   />
-                  <p className="text-sm text-green-600">✓ Background uploaded</p>
+                  <p className="text-sm text-green-600">✓ Image uploaded</p>
+                  <p className="text-xs text-gray-500">{backgroundType.toUpperCase()} • {canvasSize.width} x {canvasSize.height}px</p>
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
                       setBackgroundUrl('');
+                      setImageLoaded(false);
+                      setFields([]);
                       if (fileInputRef.current) fileInputRef.current.value = '';
                     }}
                     className="text-sm text-red-600 hover:text-red-800"
@@ -466,130 +507,73 @@ export default function CertificateTemplateDesigner({
                 <>
                   <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
                   <p className="text-sm text-gray-600">Click or drag to upload</p>
-                  <p className="text-xs text-gray-400 mt-1">PNG, JPG, PDF up to 10MB</p>
+                  <p className="text-xs text-gray-400 mt-1">JPG, PNG, GIF, WEBP, PDF up to 10MB</p>
                 </>
               )}
             </div>
-
-            {/* Canvas Size Info */}
-            {backgroundUrl && (
-              <div className="mt-3 text-xs text-gray-500">
-                <p>Size: {canvasSize.width} x {canvasSize.height} px</p>
-                <p>Type: {backgroundType.toUpperCase()}</p>
-              </div>
-            )}
           </div>
 
-          {/* Tabs */}
-          <div className="border-b">
-            <div className="flex">
-              <button
-                onClick={() => setActiveTab('fields')}
-                className={`flex-1 py-2 text-sm font-medium ${
-                  activeTab === 'fields' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-600'
-                }`}
-              >
-                Fields
-              </button>
-              <button
-                onClick={() => setActiveTab('settings')}
-                className={`flex-1 py-2 text-sm font-medium ${
-                  activeTab === 'settings' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-600'
-                }`}
-              >
-                Settings
-              </button>
+          {/* Field Mapping Guide */}
+          <div className="p-4 border-b">
+            <h3 className="font-medium text-gray-900 mb-3">2. Mark Blank Spaces</h3>
+            <p className="text-sm text-gray-600 mb-3">
+              Click "Text Field" to add a marker over each blank space.
+            </p>
+            
+            <div className="bg-blue-50 p-3 rounded-lg mb-3">
+              <h4 className="font-medium text-blue-900 text-sm mb-2">📋 Available Data Fields</h4>
+              <div className="space-y-2 text-xs">
+                <div>
+                  <p className="font-medium text-blue-800">👤 Participant Info:</p>
+                  <p className="text-blue-600 ml-2">name, email, college, department</p>
+                </div>
+                <div>
+                  <p className="font-medium text-blue-800">🎉 Event Info:</p>
+                  <p className="text-blue-600 ml-2">event_name, event_date, event_time, event_location, event_category, event_organizer</p>
+                </div>
+                <div>
+                  <p className="font-medium text-blue-800">🏆 Result:</p>
+                  <p className="text-blue-600 ml-2">result, position</p>
+                </div>
+                <div>
+                  <p className="font-medium text-blue-800">🔢 Certificate:</p>
+                  <p className="text-blue-600 ml-2">certificate_id, issue_date</p>
+                </div>
+                <div>
+                  <p className="font-medium text-blue-800">✏️ Custom:</p>
+                  <p className="text-blue-600 ml-2">custom (static text you define)</p>
+                </div>
+              </div>
             </div>
+            
+            <ul className="text-xs text-gray-500 space-y-2 list-disc pl-4">
+              <li>Drag markers to position them over blanks</li>
+              <li>Click settings ⚙️ to choose what data goes there</li>
+              <li>Select from the available data fields above</li>
+              <li>For static text, select "Custom Text"</li>
+              <li>Use preview mode to see how it will look</li>
+            </ul>
           </div>
 
-          {/* Tab Content */}
           <div className="p-4">
-            {activeTab === 'fields' && (
-              <div className="space-y-4">
-                <h4 className="font-medium text-gray-900">Field Statistics</h4>
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="bg-gray-50 p-3 rounded-lg text-center">
-                    <p className="text-2xl font-bold text-blue-600">{fields.length}</p>
-                    <p className="text-xs text-gray-600">Total Fields</p>
-                  </div>
-                  <div className="bg-gray-50 p-3 rounded-lg text-center">
-                    <p className="text-2xl font-bold text-green-600">
-                      {fields.filter(f => f.required).length}
-                    </p>
-                    <p className="text-xs text-gray-600">Required</p>
-                  </div>
-                </div>
-
-                <h4 className="font-medium text-gray-900 mt-4">Field Types</h4>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between text-sm">
-                    <span>Text Fields</span>
-                    <span className="font-medium">{fields.filter(f => f.type === 'text').length}</span>
-                  </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span>Date Fields</span>
-                    <span className="font-medium">{fields.filter(f => f.type === 'date').length}</span>
-                  </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span>QR Code Fields</span>
-                    <span className="font-medium">{fields.filter(f => f.type === 'qr').length}</span>
-                  </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span>Signature Fields</span>
-                    <span className="font-medium">{fields.filter(f => f.type === 'signature').length}</span>
-                  </div>
-                </div>
+            <h3 className="font-medium text-gray-900 mb-3">3. Field Settings</h3>
+            <p className="text-sm text-gray-600 mb-3">
+              Click on any field and then the ⚙️ icon to configure:
+            </p>
+            <div className="space-y-3 text-sm">
+              <div className="bg-gray-50 p-2 rounded">
+                <p className="font-medium">Display Label</p>
+                <p className="text-xs text-gray-600">Name shown on the field</p>
               </div>
-            )}
-
-            {activeTab === 'settings' && (
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Default Font
-                  </label>
-                  <select className="w-full px-3 py-2 border rounded-lg">
-                    <option>Arial</option>
-                    <option>Times New Roman</option>
-                    <option>Courier New</option>
-                    <option>Georgia</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Default Text Color
-                  </label>
-                  <input
-                    type="color"
-                    className="w-full h-10 border rounded-lg"
-                    defaultValue="#000000"
-                  />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <label className="text-sm font-medium text-gray-700">
-                    Generate QR Codes
-                  </label>
-                  <input
-                    type="checkbox"
-                    className="rounded border-gray-300"
-                    defaultChecked
-                  />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <label className="text-sm font-medium text-gray-700">
-                    Include Certificate ID
-                  </label>
-                  <input
-                    type="checkbox"
-                    className="rounded border-gray-300"
-                    defaultChecked
-                  />
-                </div>
+              <div className="bg-gray-50 p-2 rounded">
+                <p className="font-medium">Data Field</p>
+                <p className="text-xs text-gray-600">What information to fill</p>
               </div>
-            )}
+              <div className="bg-gray-50 p-2 rounded">
+                <p className="font-medium">Font Settings</p>
+                <p className="text-xs text-gray-600">Size, family, color, alignment</p>
+              </div>
+            </div>
           </div>
         </div>
       </div>
