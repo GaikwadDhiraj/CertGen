@@ -31,6 +31,7 @@ export default function CertificateFieldMarker({
   const [resizeDirection, setResizeDirection] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const markerRef = useRef<HTMLDivElement>(null);
+  const settingsRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLElement | null>(null);
 
   // Get container on mount
@@ -40,12 +41,28 @@ export default function CertificateFieldMarker({
     }
   }, []);
 
+  // Close settings when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (settingsRef.current && !settingsRef.current.contains(e.target as Node) &&
+          markerRef.current && !markerRef.current.contains(e.target as Node)) {
+        setShowSettings(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
   // Handle mouse down for dragging
   const handleMouseDown = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     
     if (e.button !== 0) return; // Only left click
+    if (showSettings) return; // Don't drag if settings is open
     
     const rect = markerRef.current?.getBoundingClientRect();
     if (rect) {
@@ -63,6 +80,7 @@ export default function CertificateFieldMarker({
   const handleResizeMouseDown = (e: React.MouseEvent, direction: string) => {
     e.preventDefault();
     e.stopPropagation();
+    if (showSettings) return;
     setResizeDirection(direction);
     setIsResizing(true);
   };
@@ -163,34 +181,62 @@ export default function CertificateFieldMarker({
   };
 
   // Get field key options
-  // In CertificateFieldMarker.tsx, update fieldKeyOptions to include all registration fields
+  const fieldKeyOptions = [
+    // Participant Information
+    { value: 'name', label: '👤 Participant Full Name' },
+    { value: 'email', label: '📧 Email Address' },
+    { value: 'college', label: '🏫 College/University Name' },
+    { value: 'department', label: '📚 Department/Branch' },
+    
+    // Event Information
+    { value: 'event_name', label: '🎉 Event Name' },
+    { value: 'event_date', label: '📅 Event Date' },
+    { value: 'event_time', label: '⏰ Event Time' },
+    { value: 'event_location', label: '📍 Event Location' },
+    { value: 'event_category', label: '🏷️ Event Category' },
+    { value: 'event_organizer', label: '👥 Event Organizer' },
+    
+    // Result/Achievement Information
+    { value: 'result', label: '🏆 Result (Winner/Runner-up/Participant)' },
+    { value: 'position', label: '🥇 Position (1st, 2nd, 3rd)' },
+    
+    // Certificate Information
+    { value: 'certificate_id', label: '🔢 Certificate ID' },
+    { value: 'issue_date', label: '📅 Issue Date' },
+    
+    // Custom Static Text
+    { value: 'custom', label: '✏️ Custom Static Text' },
+  ];
 
-const fieldKeyOptions = [
-  // Participant Information (from RegistrationModal)
-  { value: 'name', label: '👤 Participant Full Name' },
-  { value: 'email', label: '📧 Email Address' },
-  { value: 'college', label: '🏫 College/University Name' },
-  { value: 'department', label: '📚 Department/Branch' },
-  
-  // Event Information (from Event data)
-  { value: 'event_name', label: '🎉 Event Name' },
-  { value: 'event_date', label: '📅 Event Date' },
-  { value: 'event_time', label: '⏰ Event Time' },
-  { value: 'event_location', label: '📍 Event Location' },
-  { value: 'event_category', label: '🏷️ Event Category' },
-  { value: 'event_organizer', label: '👥 Event Organizer' },
-  
-  // Result/Achievement Information
-  { value: 'result', label: '🏆 Result (Winner/Runner-up/Participant)' },
-  { value: 'position', label: '🥇 Position (1st, 2nd, 3rd)' },
-  
-  // Certificate Information
-  { value: 'certificate_id', label: '🔢 Certificate ID' },
-  { value: 'issue_date', label: '📅 Issue Date' },
-  
-  // Custom Static Text
-  { value: 'custom', label: '✏️ Custom Static Text' },
-];
+  // Handle settings button click
+  const handleSettingsClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setShowSettings(!showSettings);
+  };
+
+  // Handle delete button click
+  const handleDeleteClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onDelete();
+  };
+
+  // Handle input changes
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const { name, value, type } = e.target;
+    
+    if (type === 'checkbox') {
+      const checked = (e.target as HTMLInputElement).checked;
+      onUpdate({ [name]: checked });
+    } else if (name === 'fontSize') {
+      onUpdate({ [name]: parseInt(value) || 16 });
+    } else {
+      onUpdate({ [name]: value });
+    }
+  };
 
   return (
     <div
@@ -230,10 +276,7 @@ const fieldKeyOptions = [
       {/* Settings Button */}
       {isSelected && (
         <button
-          onClick={(e) => {
-            e.stopPropagation();
-            setShowSettings(!showSettings);
-          }}
+          onClick={handleSettingsClick}
           className="absolute top-0 right-0 -mt-2 -mr-2 p-1 bg-white rounded-full shadow-md hover:bg-gray-100 border border-gray-200 z-30"
           style={{ pointerEvents: 'auto' }}
         >
@@ -244,10 +287,7 @@ const fieldKeyOptions = [
       {/* Delete Button */}
       {isSelected && (
         <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onDelete();
-          }}
+          onClick={handleDeleteClick}
           className="absolute bottom-0 right-0 -mb-2 -mr-2 p-1 bg-red-500 text-white rounded-full shadow-md hover:bg-red-600 z-30"
           style={{ pointerEvents: 'auto' }}
         >
@@ -275,35 +315,48 @@ const fieldKeyOptions = [
 
       {/* Settings Modal */}
       {showSettings && (
-        <div className="absolute left-full top-0 ml-2 w-64 bg-white rounded-lg shadow-xl border z-40 p-4"
-          onClick={(e) => e.stopPropagation()}>
-          <div className="flex items-center justify-between mb-3">
+        <div 
+          ref={settingsRef}
+          className="absolute left-full top-0 ml-2 w-72 bg-white rounded-lg shadow-xl border z-50 p-4"
+          onClick={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          <div className="flex items-center justify-between mb-4">
             <h4 className="font-medium text-gray-900">Field Settings</h4>
-            <button onClick={() => setShowSettings(false)}>
+            <button 
+              onClick={() => setShowSettings(false)}
+              className="p-1 hover:bg-gray-100 rounded"
+            >
               <X className="w-4 h-4" />
             </button>
           </div>
 
-          <div className="space-y-3">
+          <div className="space-y-4">
             {/* Field Label */}
             <div>
-              <label className="block text-xs text-gray-600 mb-1">Display Label</label>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                Display Label
+              </label>
               <input
                 type="text"
+                name="label"
                 value={field.label || ''}
-                onChange={(e) => onUpdate({ label: e.target.value })}
-                className="w-full px-2 py-1 text-sm border rounded"
+                onChange={handleInputChange}
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 placeholder="e.g., Participant Name"
               />
             </div>
 
-            {/* Field Key */}
+            {/* Field Key - Dropdown */}
             <div>
-              <label className="block text-xs text-gray-600 mb-1">Data Field</label>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                Data Field
+              </label>
               <select
-                value={field.field_key}
-                onChange={(e) => onUpdate({ field_key: e.target.value })}
-                className="w-full px-2 py-1 text-sm border rounded"
+                name="field_key"
+                value={field.field_key || 'name'}
+                onChange={handleInputChange}
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               >
                 {fieldKeyOptions.map(option => (
                   <option key={option.value} value={option.value}>
@@ -311,75 +364,146 @@ const fieldKeyOptions = [
                   </option>
                 ))}
               </select>
+              <p className="text-xs text-gray-500 mt-1">
+                Select what data should appear in this field
+              </p>
             </div>
+
+            {/* Custom value for custom field */}
+            {field.field_key === 'custom' && (
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Custom Text
+                </label>
+                <input
+                  type="text"
+                  name="defaultValue"
+                  value={field.defaultValue || ''}
+                  onChange={handleInputChange}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Enter static text"
+                />
+              </div>
+            )}
 
             {/* Font settings for text fields */}
             {field.type === 'text' && (
               <>
+                {/* Font Size */}
                 <div>
-                  <label className="block text-xs text-gray-600 mb-1">Font Size: {field.fontSize || 16}px</label>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    Font Size: {field.fontSize || 16}px
+                  </label>
                   <input
                     type="range"
+                    name="fontSize"
                     min="8"
                     max="72"
                     value={field.fontSize || 16}
-                    onChange={(e) => onUpdate({ fontSize: parseInt(e.target.value) })}
+                    onChange={handleInputChange}
                     className="w-full"
                   />
                 </div>
 
+                {/* Font Family */}
                 <div>
-                  <label className="block text-xs text-gray-600 mb-1">Font Family</label>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    Font Family
+                  </label>
                   <select
+                    name="fontFamily"
                     value={field.fontFamily || 'Arial'}
-                    onChange={(e) => onUpdate({ fontFamily: e.target.value })}
-                    className="w-full px-2 py-1 text-sm border rounded"
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   >
                     <option value="Arial">Arial</option>
                     <option value="Times New Roman">Times New Roman</option>
                     <option value="Courier New">Courier New</option>
                     <option value="Georgia">Georgia</option>
+                    <option value="Verdana">Verdana</option>
+                    <option value="Helvetica">Helvetica</option>
                   </select>
                 </div>
 
+                {/* Text Color */}
                 <div>
-                  <label className="block text-xs text-gray-600 mb-1">Text Color</label>
-                  <input
-                    type="color"
-                    value={field.color || '#000000'}
-                    onChange={(e) => onUpdate({ color: e.target.value })}
-                    className="w-full h-8 border rounded"
-                  />
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    Text Color
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="color"
+                      name="color"
+                      value={field.color || '#000000'}
+                      onChange={handleInputChange}
+                      className="w-10 h-8 border rounded"
+                    />
+                    <input
+                      type="text"
+                      name="color"
+                      value={field.color || '#000000'}
+                      onChange={handleInputChange}
+                      className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="#000000"
+                    />
+                  </div>
                 </div>
 
+                {/* Text Alignment */}
                 <div>
-                  <label className="block text-xs text-gray-600 mb-1">Alignment</label>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    Alignment
+                  </label>
                   <select
+                    name="textAlign"
                     value={field.textAlign || 'left'}
-                    onChange={(e) => onUpdate({ textAlign: e.target.value })}
-                    className="w-full px-2 py-1 text-sm border rounded"
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   >
                     <option value="left">Left</option>
                     <option value="center">Center</option>
                     <option value="right">Right</option>
                   </select>
                 </div>
+
+                {/* Font Weight */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    Font Weight
+                  </label>
+                  <select
+                    name="fontWeight"
+                    value={field.fontWeight || 'normal'}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value="normal">Normal</option>
+                    <option value="bold">Bold</option>
+                    <option value="lighter">Light</option>
+                  </select>
+                </div>
               </>
             )}
 
-            {/* Custom value */}
-            {field.field_key === 'custom' && (
-              <div>
-                <label className="block text-xs text-gray-600 mb-1">Default Text</label>
-                <input
-                  type="text"
-                  value={field.defaultValue || ''}
-                  onChange={(e) => onUpdate({ defaultValue: e.target.value })}
-                  className="w-full px-2 py-1 text-sm border rounded"
-                  placeholder="Enter static text"
-                />
-              </div>
-            )}
+            {/* Required Toggle */}
+            <div className="flex items-center justify-between pt-2 border-t">
+              <label className="text-xs font-medium text-gray-700">
+                Required Field
+              </label>
+              <input
+                type="checkbox"
+                name="required"
+                checked={field.required || false}
+                onChange={(e) => onUpdate({ required: e.target.checked })}
+                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              />
+            </div>
+
+            {/* Position Info */}
+            <div className="text-xs text-gray-500 pt-2 border-t">
+              <p>Position: X={Math.round(field.x)}, Y={Math.round(field.y)}</p>
+              <p>Size: {Math.round(field.width)} x {Math.round(field.height)}px</p>
+            </div>
           </div>
         </div>
       )}
