@@ -815,6 +815,24 @@ export default function AdminPage() {
                                     >
                                       Attended
                                     </button>
+                                    {/* // In the event card, add this near the event title */}
+{/* Certificate Status */}
+{event.certificate_ready && (
+  <div className="mt-2 flex items-center gap-2">
+    <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full flex items-center gap-1">
+      <Award className="w-3 h-3" />
+      Certificate Ready
+    </span>
+    {/* Add a button to view assigned certificates */}
+    <button
+      onClick={() => router.push(`/admin/certificates?eventId=${event.id}`)}
+      className="text-xs text-blue-600 hover:text-blue-800"
+    >
+      View Certificates
+    </button>
+  </div>
+)}
+
                                     <button
                                       onClick={() => handleUpdateStatusFromModal(participant.id, 'cancelled')}
                                       className="text-xs bg-yellow-100 text-yellow-800 px-3 py-1 rounded hover:bg-yellow-200 transition-colors"

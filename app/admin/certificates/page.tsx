@@ -6,7 +6,8 @@ import {
   Plus, FileText, Edit, Trash2, Download, Copy, 
   Calendar, Users, Clock, Search, Filter, MoreHorizontal,
   Award, Mail, Eye, Settings, Upload, Image as ImageIcon,
-  CheckCircle, XCircle, AlertCircle, ChevronRight
+  CheckCircle, XCircle, AlertCircle, ChevronRight,
+  MapPin, Tag, X
 } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import CertificateTemplateDesigner from '@/app/components/CertificateTemplateDesigner';
@@ -24,6 +25,13 @@ export default function CertificateManagementPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'templates' | 'assigned' | 'issued'>('templates');
 
+  // Event Selector State
+  const [showEventSelector, setShowEventSelector] = useState(false);
+  const [availableEvents, setAvailableEvents] = useState<any[]>([]);
+  const [selectedTemplateForAssignment, setSelectedTemplateForAssignment] = useState<any>(null);
+  const [loadingEvents, setLoadingEvents] = useState(false);
+  const [eventSearchQuery, setEventSearchQuery] = useState('');
+
   useEffect(() => {
     loadData();
   }, []);
@@ -32,126 +40,106 @@ export default function CertificateManagementPage() {
     setLoading(true);
     try {
       // Load templates
-      const { data: templatesData } = await supabase
+      const { data: templatesData, error: templatesError } = await supabase
         .from('certificate_templates')
         .select('*')
         .order('created_at', { ascending: false });
 
+      if (templatesError) throw templatesError;
+
       // Load events
-      const { data: eventsData } = await supabase
+      const { data: eventsData, error: eventsError } = await supabase
         .from('events')
         .select('*')
         .order('date', { ascending: false });
+
+      if (eventsError) throw eventsError;
 
       setTemplates(templatesData || []);
       setEvents(eventsData || []);
     } catch (error) {
       console.error('Error loading data:', error);
+      alert('Error loading data');
     } finally {
       setLoading(false);
     }
   };
 
-  // app/admin/certificates/page.tsx - Updated handleSaveTemplate
-
-const handleSaveTemplate = async (templateData: any) => {
-  try {
-    console.log('=== Starting template save ===');
-    console.log('Template data received:', JSON.stringify(templateData, null, 2));
-    
-    // Validate required fields
-    if (!templateData.name) {
-      alert('Template name is required');
-      return;
-    }
-    
-    if (!templateData.background_url) {
-      alert('Background image is required');
-      return;
-    }
-
-    // Prepare data for Supabase
-    const templateToSave = {
-      name: templateData.name,
-      description: templateData.description || '',
-      background_url: templateData.background_url,
-      background_type: templateData.background_type || 'image',
-      width: templateData.width || 800,
-      height: templateData.height || 600,
-      fields: templateData.fields || [],
-      updated_at: new Date().toISOString()
-    };
-
-    console.log('Data prepared for Supabase:', JSON.stringify(templateToSave, null, 2));
-
-    let result;
-    
-    if (selectedTemplate) {
-      // Update existing template
-      console.log('Updating template with ID:', selectedTemplate.id);
+  const handleSaveTemplate = async (templateData: any) => {
+    try {
+      console.log('Saving template with data:', JSON.stringify(templateData, null, 2));
       
-      result = await supabase
-        .from('certificate_templates')
-        .update(templateToSave)
-        .eq('id', selectedTemplate.id)
-        .select();
-
-      console.log('Update result:', result);
-    } else {
-      // Create new template
-      console.log('Creating new template');
+      // Validate required fields
+      if (!templateData.name) {
+        alert('Template name is required');
+        return;
+      }
       
-      result = await supabase
-        .from('certificate_templates')
-        .insert([{
-          ...templateToSave,
-          created_at: new Date().toISOString()
-        }])
-        .select();
+      if (!templateData.background_url) {
+        alert('Background image is required');
+        return;
+      }
 
-      console.log('Insert result:', result);
+      const templateToSave = {
+        name: templateData.name,
+        description: templateData.description || '',
+        background_url: templateData.background_url,
+        background_type: templateData.background_type || 'image',
+        width: templateData.width || 800,
+        height: templateData.height || 600,
+        fields: templateData.fields || [],
+        updated_at: new Date().toISOString()
+      };
+
+      let result;
+      
+      if (selectedTemplate) {
+        // Update existing template
+        console.log('Updating template with ID:', selectedTemplate.id);
+        
+        result = await supabase
+          .from('certificate_templates')
+          .update(templateToSave)
+          .eq('id', selectedTemplate.id)
+          .select();
+
+        if (result.error) throw result.error;
+        
+        console.log('Template updated successfully:', result.data);
+        alert('Template updated successfully!');
+      } else {
+        // Create new template
+        console.log('Creating new template');
+        
+        result = await supabase
+          .from('certificate_templates')
+          .insert([{
+            ...templateToSave,
+            created_at: new Date().toISOString()
+          }])
+          .select();
+
+        if (result.error) throw result.error;
+        
+        console.log('Template created successfully:', result.data);
+        alert('Template created successfully!');
+      }
+
+      setShowDesigner(false);
+      setSelectedTemplate(null);
+      await loadData();
+      
+    } catch (error: any) {
+      console.error('Error in handleSaveTemplate:', error);
+      
+      let errorMessage = 'Error saving template';
+      if (error.message) errorMessage += `: ${error.message}`;
+      if (error.details) errorMessage += `\nDetails: ${error.details}`;
+      if (error.hint) errorMessage += `\nHint: ${error.hint}`;
+      
+      alert(errorMessage);
     }
-
-    // Check for errors
-    if (result.error) {
-      console.error('Supabase error details:', {
-        message: result.error.message,
-        details: result.error.details,
-        hint: result.error.hint,
-        code: result.error.code
-      });
-      
-      // Show specific error message
-      let errorMsg = 'Database error: ';
-      if (result.error.message) errorMsg += result.error.message;
-      if (result.error.details) errorMsg += `\nDetails: ${result.error.details}`;
-      if (result.error.hint) errorMsg += `\nHint: ${result.error.hint}`;
-      
-      alert(errorMsg);
-      return;
-    }
-
-    console.log('Operation successful, data:', result.data);
-    alert(selectedTemplate ? 'Template updated successfully!' : 'Template created successfully!');
-
-    setShowDesigner(false);
-    setSelectedTemplate(null);
-    await loadData();
-    
-  } catch (error: any) {
-    console.error('=== Error in handleSaveTemplate ===');
-    console.error('Error object:', error);
-    console.error('Error message:', error.message);
-    console.error('Error stack:', error.stack);
-    
-    // Try to get more details
-    if (error.details) console.error('Error details:', error.details);
-    if (error.hint) console.error('Error hint:', error.hint);
-    if (error.code) console.error('Error code:', error.code);
-    
-    alert(`Error saving template: ${error.message || 'Unknown error'}`);
-  }
-};
+  };
 
   const handleDeleteTemplate = async (templateId: number) => {
     if (!confirm('Are you sure you want to delete this template?')) return;
@@ -172,13 +160,46 @@ const handleSaveTemplate = async (templateData: any) => {
     }
   };
 
-  const handleAssignTemplate = (template: any) => {
-    setSelectedTemplate(template);
-    // Show event selection modal
+  // Load events for assignment
+  const loadEventsForAssignment = async () => {
+    setLoadingEvents(true);
+    try {
+      const { data, error } = await supabase
+        .from('events')
+        .select('*')
+        .order('date', { ascending: false });
+      
+      if (error) throw error;
+      setAvailableEvents(data || []);
+    } catch (error) {
+      console.error('Error loading events:', error);
+      alert('Error loading events');
+    } finally {
+      setLoadingEvents(false);
+    }
+  };
+
+  // Handle assign button click
+  const handleAssignClick = async (template: any) => {
+    setSelectedTemplateForAssignment(template);
+    await loadEventsForAssignment();
+    setShowEventSelector(true);
+  };
+
+  // Handle event selection
+  const handleEventSelect = (event: any) => {
+    setSelectedEvent(event);
+    setShowEventSelector(false);
+    setShowAssignment(true);
   };
 
   const filteredTemplates = templates.filter(t => 
     t.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const filteredEvents = availableEvents.filter(event => 
+    event.title.toLowerCase().includes(eventSearchQuery.toLowerCase()) ||
+    event.category.toLowerCase().includes(eventSearchQuery.toLowerCase())
   );
 
   return (
@@ -238,16 +259,18 @@ const handleSaveTemplate = async (templateData: any) => {
           </div>
 
           {/* Search */}
-          <div className="mt-4 relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search templates..."
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-          </div>
+          {activeTab === 'templates' && (
+            <div className="mt-4 relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search templates..."
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+          )}
         </div>
       </div>
 
@@ -328,7 +351,7 @@ const handleSaveTemplate = async (templateData: any) => {
                           Edit
                         </button>
                         <button
-                          onClick={() => handleAssignTemplate(template)}
+                          onClick={() => handleAssignClick(template)}
                           className="flex-1 px-3 py-2 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 flex items-center justify-center gap-2"
                         >
                           <Award className="w-4 h-4" />
@@ -376,22 +399,126 @@ const handleSaveTemplate = async (templateData: any) => {
         </div>
       )}
 
+      {/* Event Selector Modal */}
+      {showEventSelector && selectedTemplateForAssignment && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden">
+            <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">Select Event</h2>
+                <p className="text-sm text-gray-600 mt-1">
+                  Assign template: <span className="font-medium text-green-600">{selectedTemplateForAssignment.name}</span>
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowEventSelector(false);
+                  setSelectedTemplateForAssignment(null);
+                }}
+                className="p-2 hover:bg-gray-100 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6">
+              {/* Search */}
+              <div className="relative mb-4">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search events by name or category..."
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  value={eventSearchQuery}
+                  onChange={(e) => setEventSearchQuery(e.target.value)}
+                />
+              </div>
+
+              {/* Events List */}
+              {loadingEvents ? (
+                <div className="text-center py-12">
+                  <div className="animate-spin rounded-full h-8 w-8 border-4 border-blue-600 border-t-transparent mx-auto"></div>
+                  <p className="mt-4 text-gray-600">Loading events...</p>
+                </div>
+              ) : (
+                <div className="space-y-3 max-h-96 overflow-y-auto">
+                  {filteredEvents.map((event) => (
+                    <div
+                      key={event.id}
+                      onClick={() => handleEventSelect(event)}
+                      className="p-4 border border-gray-200 rounded-lg hover:border-green-500 hover:bg-green-50 cursor-pointer transition-all"
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <div>
+                          <h3 className="font-medium text-gray-900">{event.title}</h3>
+                          <p className="text-sm text-gray-600 mt-1">{event.description.substring(0, 100)}...</p>
+                        </div>
+                        <span className={`px-2 py-1 text-xs rounded-full ${
+                          event.status === 'active' ? 'bg-green-100 text-green-800' :
+                          event.status === 'completed' ? 'bg-gray-100 text-gray-800' :
+                          'bg-blue-100 text-blue-800'
+                        }`}>
+                          {event.status}
+                        </span>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm text-gray-600 mt-3">
+                        <div className="flex items-center gap-1">
+                          <Calendar className="w-4 h-4" />
+                          {new Date(event.date).toLocaleDateString()}
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Users className="w-4 h-4" />
+                          {event.current_participants || 0}/{event.max_participants}
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <MapPin className="w-4 h-4" />
+                          {event.location}
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Tag className="w-4 h-4" />
+                          {event.category}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
+                        <span>Organizer: {event.organizer}</span>
+                        <span>Time: {event.time}</span>
+                      </div>
+                    </div>
+                  ))}
+
+                  {filteredEvents.length === 0 && (
+                    <div className="text-center py-12">
+                      <Calendar className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                      <p className="text-gray-600">No events found</p>
+                      <p className="text-sm text-gray-400 mt-1">Create an event first to assign certificates</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Assignment Modal */}
-      {showAssignment && selectedTemplate && selectedEvent && (
+      {showAssignment && selectedTemplateForAssignment && selectedEvent && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden">
             <CertificateAssignment
               eventId={selectedEvent.id}
               eventName={selectedEvent.title}
-              templateId={selectedTemplate.id}
+              templateId={selectedTemplateForAssignment.id}
               onComplete={() => {
                 setShowAssignment(false);
-                setSelectedTemplate(null);
+                setSelectedTemplateForAssignment(null);
                 setSelectedEvent(null);
+                loadData();
               }}
               onClose={() => {
                 setShowAssignment(false);
-                setSelectedTemplate(null);
+                setSelectedTemplateForAssignment(null);
                 setSelectedEvent(null);
               }}
             />

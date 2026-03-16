@@ -2,10 +2,11 @@
 'use client';
 
 import React, { useEffect, useRef } from 'react';
+import { Download } from 'lucide-react';
 
 interface CertificatePreviewProps {
   template: any;
-  participant?: any;
+  participant: any;
 }
 
 export default function CertificatePreview({ template, participant }: CertificatePreviewProps) {
@@ -32,10 +33,9 @@ export default function CertificatePreview({ template, participant }: Certificat
 
         // Draw each field
         template.fields.forEach((field: any) => {
-          // Get the value for this field based on field_key
+          // Get the value for this field
           let value = '';
           
-          // Map field_key to actual data
           switch(field.field_key) {
             // Participant Information
             case 'name':
@@ -45,7 +45,7 @@ export default function CertificatePreview({ template, participant }: Certificat
               value = participant.user_email || 'john@example.com';
               break;
             case 'college':
-              value = participant.user_college || 'SVERI College of Engineering';
+              value = participant.user_college || 'SVERI College';
               break;
             case 'department':
               value = participant.user_department || 'Computer Science';
@@ -56,36 +56,38 @@ export default function CertificatePreview({ template, participant }: Certificat
               value = template.event_name || 'SPIRIT 2K24';
               break;
             case 'event_date':
-              value = new Date().toLocaleDateString('en-US', { 
-                day: 'numeric', 
-                month: 'long', 
-                year: 'numeric' 
-              });
+              value = template.event?.date 
+                ? new Date(template.event.date).toLocaleDateString('en-US', { 
+                    day: 'numeric', 
+                    month: 'long', 
+                    year: 'numeric' 
+                  })
+                : '04 April 2024';
               break;
             case 'event_time':
-              value = '10:00 AM - 4:00 PM';
+              value = template.event?.time || '10:00 AM';
               break;
             case 'event_location':
-              value = 'Main Auditorium';
+              value = template.event?.location || 'Main Auditorium';
               break;
             case 'event_category':
-              value = 'Technical Event';
+              value = template.event?.category || 'Technical Event';
               break;
             case 'event_organizer':
-              value = 'Department of CSE';
+              value = template.event?.organizer || 'Department of CSE';
               break;
             
             // Result Information
             case 'result':
-              value = 'Winner'; // You can make this dynamic
+              value = 'Participant'; // You can make this dynamic
               break;
             case 'position':
-              value = '1st';
+              value = '';
               break;
             
             // Certificate Information
             case 'certificate_id':
-              value = `CERT-${Date.now()}`;
+              value = `CERT-${template.event?.id || '000'}-${participant.id || '001'}`;
               break;
             case 'issue_date':
               value = new Date().toLocaleDateString('en-US', { 
@@ -118,7 +120,7 @@ export default function CertificatePreview({ template, participant }: Certificat
             x = field.x + field.width;
           }
           
-          // Draw text (with word wrap if needed)
+          // Draw text with word wrap
           const words = value.split(' ');
           let line = '';
           let y = field.y + (field.height / 2);
@@ -145,14 +147,31 @@ export default function CertificatePreview({ template, participant }: Certificat
     generatePreview();
   }, [template, participant]);
 
+  const downloadCertificate = () => {
+    if (!canvasRef.current) return;
+    
+    const link = document.createElement('a');
+    link.download = `certificate-${participant.user_name?.replace(/\s+/g, '-') || 'participant'}.png`;
+    link.href = canvasRef.current.toDataURL('image/png');
+    link.click();
+  };
+
   if (!template || !participant) return null;
 
   return (
-    <div className="bg-white rounded-lg shadow-lg p-4">
-      <h3 className="text-lg font-bold mb-4">Certificate Preview for {participant.user_name}</h3>
+    <div className="bg-white rounded-lg">
+      <div className="mb-4 flex justify-end">
+        <button
+          onClick={downloadCertificate}
+          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
+        >
+          <Download className="w-4 h-4" />
+          Download Preview
+        </button>
+      </div>
       <canvas 
         ref={canvasRef} 
-        className="w-full border rounded-lg"
+        className="w-full border rounded-lg shadow-lg"
         style={{ maxWidth: '100%', height: 'auto' }}
       />
     </div>

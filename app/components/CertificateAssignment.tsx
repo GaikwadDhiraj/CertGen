@@ -4,7 +4,8 @@
 import React, { useState, useEffect } from 'react';
 import { 
   X, Users, Search, Award, Download, Mail, 
-  Eye, CheckCircle, AlertCircle, Loader 
+  Eye, CheckCircle, AlertCircle, Loader, Calendar,
+  MapPin, Tag, ChevronRight
 } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import CertificateGenerator from './CertificateGenerator';
@@ -27,45 +28,81 @@ export default function CertificateAssignment({
 }: CertificateAssignmentProps) {
   const [participants, setParticipants] = useState<any[]>([]);
   const [template, setTemplate] = useState<any>(null);
+  const [event, setEvent] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedParticipants, setSelectedParticipants] = useState<number[]>([]);
   const [showGenerator, setShowGenerator] = useState(false);
   const [showFieldMapping, setShowFieldMapping] = useState(false);
   const [selectedParticipantForPreview, setSelectedParticipantForPreview] = useState<any>(null);
+  const [generatedCertificates, setGeneratedCertificates] = useState<any[]>([]);
+  const [showCertificates, setShowCertificates] = useState(false);
 
-  useEffect(() => {
+  // In CertificateAssignment.tsx, ensure the participant data is loaded correctly
+
+useEffect(() => {
+  if (eventId && templateId) {
     loadData();
-  }, [eventId, templateId]);
+    loadGeneratedCertificates();
+  }
+}, [eventId, templateId]);
 
-  const loadData = async () => {
-    setLoading(true);
+const loadData = async () => {
+  setLoading(true);
+  try {
+    // Load template
+    const { data: templateData, error: templateError } = await supabase
+      .from('certificate_templates')
+      .select('*')
+      .eq('id', templateId)
+      .single();
+
+    if (templateError) throw templateError;
+
+    // Load event details
+    const { data: eventData, error: eventError } = await supabase
+      .from('events')
+      .select('*')
+      .eq('id', eventId)
+      .single();
+
+    if (eventError) throw eventError;
+
+    // Load participants who attended
+    const { data: participantsData, error: participantsError } = await supabase
+      .from('registrations')
+      .select('*')
+      .eq('event_id', eventId)
+      .eq('status', 'attended');
+
+    if (participantsError) throw participantsError;
+
+    setTemplate(templateData);
+    setEvent(eventData);
+    setParticipants(participantsData || []);
+    
+    console.log('Loaded participants:', participantsData); // Debug log
+  } catch (error) {
+    console.error('Error loading data:', error);
+    alert('Error loading data');
+  } finally {
+    setLoading(false);
+  }
+};
+
+  const loadGeneratedCertificates = async () => {
     try {
-      // Load template
-      const { data: templateData, error: templateError } = await supabase
-        .from('certificate_templates')
-        .select('*')
-        .eq('id', templateId)
-        .single();
-
-      if (templateError) throw templateError;
-
-      // Load participants who attended
-      const { data: participantsData, error: participantsError } = await supabase
-        .from('registrations')
+      const { data, error } = await supabase
+        .from('issued_certificates')
         .select('*')
         .eq('event_id', eventId)
-        .eq('status', 'attended');
+        .eq('template_id', templateId)
+        .order('generated_at', { ascending: false });
 
-      if (participantsError) throw participantsError;
-
-      setTemplate(templateData);
-      setParticipants(participantsData || []);
+      if (error) throw error;
+      setGeneratedCertificates(data || []);
     } catch (error) {
-      console.error('Error loading data:', error);
-      alert('Error loading data');
-    } finally {
-      setLoading(false);
+      console.error('Error loading certificates:', error);
     }
   };
 
@@ -83,6 +120,13 @@ export default function CertificateAssignment({
     setShowGenerator(true);
   };
 
+  const downloadCertificate = (url: string, participantName: string) => {
+    const link = document.createElement('a');
+    link.download = `certificate-${participantName.replace(/\s+/g, '-')}.png`;
+    link.href = url;
+    link.click();
+  };
+
   // Function to show field mapping example
   const getFieldMappingExample = () => {
     const exampleParticipant = {
@@ -98,7 +142,7 @@ export default function CertificateAssignment({
           <h4 className="font-medium text-blue-900">📋 Field Mapping Example</h4>
           <button
             onClick={() => setShowFieldMapping(!showFieldMapping)}
-            className="text-blue-600 hover:text-blue-800"
+            className="text-blue-600 hover:text-blue-800 text-sm"
           >
             {showFieldMapping ? 'Hide' : 'Show'}
           </button>
@@ -113,31 +157,19 @@ export default function CertificateAssignment({
               {template?.fields?.map((field: any, index: number) => {
                 let exampleValue = '';
                 switch(field.field_key) {
-                  // Participant Info
                   case 'name': exampleValue = exampleParticipant.user_name; break;
                   case 'email': exampleValue = exampleParticipant.user_email; break;
                   case 'college': exampleValue = exampleParticipant.user_college; break;
                   case 'department': exampleValue = exampleParticipant.user_department; break;
-                  
-                  // Event Info
                   case 'event_name': exampleValue = eventName; break;
-                  case 'event_date': exampleValue = new Date().toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric' }); break;
-                  case 'event_time': exampleValue = '10:00 AM'; break;
-                  case 'event_location': exampleValue = 'Main Auditorium'; break;
-                  case 'event_category': exampleValue = 'Technical Event'; break;
-                  case 'event_organizer': exampleValue = 'Department of CSE'; break;
-                  
-                  // Result
+                  case 'event_date': exampleValue = new Date(event?.date).toLocaleDateString(); break;
+                  case 'event_time': exampleValue = event?.time; break;
+                  case 'event_location': exampleValue = event?.location; break;
+                  case 'event_category': exampleValue = event?.category; break;
                   case 'result': exampleValue = 'Winner'; break;
-                  case 'position': exampleValue = '1st'; break;
-                  
-                  // Certificate
                   case 'certificate_id': exampleValue = `CERT-${eventId}-001`; break;
                   case 'issue_date': exampleValue = new Date().toLocaleDateString(); break;
-                  
-                  // Custom
                   case 'custom': exampleValue = field.defaultValue || 'Custom Text'; break;
-                  
                   default: exampleValue = '[Data will appear here]';
                 }
                 
@@ -171,7 +203,7 @@ export default function CertificateAssignment({
       <div className="px-6 py-4 border-b border-gray-200">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-xl font-bold text-gray-900">Generate Certificates</h2>
+            <h2 className="text-xl font-bold text-gray-900">Certificate Management</h2>
             <p className="text-gray-600">Event: {eventName}</p>
             {template && (
               <p className="text-sm text-blue-600 mt-1">
@@ -186,18 +218,88 @@ export default function CertificateAssignment({
             <X className="w-5 h-5" />
           </button>
         </div>
+
+        {/* Tabs */}
+        <div className="flex mt-4 border-b">
+          <button
+            onClick={() => setShowGenerator(false)}
+            className={`px-4 py-2 text-sm font-medium ${
+              !showGenerator ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-600'
+            }`}
+          >
+            Participants
+          </button>
+          <button
+            onClick={() => setShowCertificates(!showCertificates)}
+            className={`px-4 py-2 text-sm font-medium ${
+              showCertificates ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-600'
+            }`}
+          >
+            Generated Certificates ({generatedCertificates.length})
+          </button>
+        </div>
       </div>
 
       {showGenerator ? (
         <CertificateGenerator
-          eventId={eventId}
-          template={template}
-          participants={participants.filter(p => selectedParticipants.includes(p.id))}
-          onComplete={() => {
-            setShowGenerator(false);
-            onComplete();
-          }}
-        />
+  eventId={eventId}
+  template={template}
+  participants={participants.filter(p => selectedParticipants.includes(p.id))}
+  event={event} // Pass the event data
+  onComplete={() => {
+    setShowGenerator(false);
+    loadGeneratedCertificates();
+    onComplete();
+  }}
+/>
+      ) : showCertificates ? (
+        <div className="p-6">
+          <h3 className="font-medium text-gray-900 mb-4">Generated Certificates</h3>
+          {generatedCertificates.length === 0 ? (
+            <div className="text-center py-12 bg-gray-50 rounded-lg">
+              <Award className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+              <p className="text-gray-600">No certificates generated yet</p>
+            </div>
+          ) : (
+            <div className="space-y-3 max-h-96 overflow-y-auto">
+              {generatedCertificates.map((cert) => (
+                <div key={cert.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                  <div>
+                    <p className="font-medium text-gray-900">{cert.participant_name}</p>
+                    <p className="text-sm text-gray-600">{cert.participant_email}</p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Generated: {new Date(cert.generated_at).toLocaleString()}
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => {
+                        const participant = participants.find(p => p.id === cert.registration_id);
+                        setSelectedParticipantForPreview(participant || {
+                          user_name: cert.participant_name,
+                          user_email: cert.participant_email
+                        });
+                      }}
+                      className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg"
+                      title="View Certificate"
+                    >
+                      <Eye className="w-4 h-4" />
+                    </button>
+                    {cert.certificate_url && (
+                      <button
+                        onClick={() => downloadCertificate(cert.certificate_url, cert.participant_name)}
+                        className="p-2 text-green-600 hover:bg-green-100 rounded-lg"
+                        title="Download"
+                      >
+                        <Download className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       ) : (
         <>
           {/* Search and Info */}
@@ -259,48 +361,75 @@ export default function CertificateAssignment({
                 </div>
 
                 {/* Participant List */}
-                {filteredParticipants.map((participant) => (
-                  <div key={participant.id} className="px-6 py-4 hover:bg-gray-50 border-b">
-                    <div className="flex items-start justify-between">
-                      <label className="flex items-start gap-3 cursor-pointer flex-1">
-                        <input
-                          type="checkbox"
-                          checked={selectedParticipants.includes(participant.id)}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setSelectedParticipants([...selectedParticipants, participant.id]);
-                            } else {
-                              setSelectedParticipants(selectedParticipants.filter(id => id !== participant.id));
-                            }
-                          }}
-                          className="mt-1 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                        />
-                        <div className="flex-1">
-                          <p className="font-medium text-gray-900">{participant.user_name}</p>
-                          <p className="text-sm text-gray-600">{participant.user_email}</p>
-                          <div className="flex items-center gap-2 mt-1 text-xs text-gray-500">
-                            <span>{participant.user_college}</span>
-                            {participant.user_department && (
-                              <>
-                                <span>•</span>
-                                <span>{participant.user_department}</span>
-                              </>
-                            )}
+                {filteredParticipants.map((participant) => {
+                  const hasCertificate = generatedCertificates.some(c => c.registration_id === participant.id);
+                  
+                  return (
+                    <div key={participant.id} className="px-6 py-4 hover:bg-gray-50 border-b">
+                      <div className="flex items-start justify-between">
+                        <label className="flex items-start gap-3 cursor-pointer flex-1">
+                          <input
+                            type="checkbox"
+                            checked={selectedParticipants.includes(participant.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedParticipants([...selectedParticipants, participant.id]);
+                              } else {
+                                setSelectedParticipants(selectedParticipants.filter(id => id !== participant.id));
+                              }
+                            }}
+                            className="mt-1 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                          />
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <p className="font-medium text-gray-900">{participant.user_name}</p>
+                              {hasCertificate && (
+                                <span className="px-2 py-0.5 bg-green-100 text-green-800 text-xs rounded-full">
+                                  Certificate Ready
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-sm text-gray-600">{participant.user_email}</p>
+                            <div className="flex items-center gap-2 mt-1 text-xs text-gray-500">
+                              <span>{participant.user_college}</span>
+                              {participant.user_department && (
+                                <>
+                                  <span>•</span>
+                                  <span>{participant.user_department}</span>
+                                </>
+                              )}
+                            </div>
                           </div>
+                        </label>
+                        
+                        {/* Action Buttons */}
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => setSelectedParticipantForPreview(participant)}
+                            className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg"
+                            title="Preview Certificate"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </button>
+                          {hasCertificate && (
+                            <button
+                              onClick={() => {
+                                const cert = generatedCertificates.find(c => c.registration_id === participant.id);
+                                if (cert?.certificate_url) {
+                                  downloadCertificate(cert.certificate_url, participant.user_name);
+                                }
+                              }}
+                              className="p-2 text-green-600 hover:bg-green-100 rounded-lg"
+                              title="Download Certificate"
+                            >
+                              <Download className="w-4 h-4" />
+                            </button>
+                          )}
                         </div>
-                      </label>
-                      
-                      {/* Preview Button */}
-                      <button
-                        onClick={() => setSelectedParticipantForPreview(participant)}
-                        className="ml-4 px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 flex items-center gap-1"
-                      >
-                        <Eye className="w-4 h-4" />
-                        Preview
-                      </button>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </>
             )}
           </div>
@@ -353,7 +482,7 @@ export default function CertificateAssignment({
             </div>
             <div className="p-6">
               <CertificatePreview 
-                template={{...template, event_name: eventName}} 
+                template={{...template, event_name: eventName, event}} 
                 participant={selectedParticipantForPreview}
               />
             </div>

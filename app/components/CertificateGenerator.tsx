@@ -7,8 +7,9 @@ import { supabase } from '@/lib/supabaseClient';
 
 interface CertificateGeneratorProps {
   eventId: number;
-  template: any; // The template with fields
-  participants: any[]; // List of participants who attended
+  template: any;
+  participants: any[];
+  event?: any; // Add this
   onComplete?: () => void;
 }
 
@@ -25,16 +26,20 @@ export default function CertificateGenerator({
 
   // Generate a single certificate - FIX: Make it async
   const generateCertificate = async (participant: any) => {
-    return new Promise(async (resolve) => {  // Make the Promise callback async
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
+  return new Promise(async (resolve) => {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      resolve(false);
+      return;
+    }
 
-      // Load background image
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      
-      img.onload = async () => {  // Make onload async
+    // Load background image
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    
+    img.onload = async () => {
+      try {
         canvas.width = img.width;
         canvas.height = img.height;
         
@@ -43,84 +48,169 @@ export default function CertificateGenerator({
 
         // Draw each field
         template.fields.forEach((field: any) => {
-          // Get the value for this field
+          // Get the value for this field based on field_key
           let value = '';
+          
           switch(field.field_key) {
+            // Participant Information
             case 'name':
-              value = participant.user_name;
+              value = participant.user_name || '';
               break;
             case 'email':
-              value = participant.user_email;
+              value = participant.user_email || '';
               break;
             case 'college':
-              value = participant.user_college;
+              value = participant.user_college || '';
               break;
             case 'department':
-              value = participant.user_department;
+              value = participant.user_department || '';
               break;
+            
+            // Event Information
             case 'event_name':
-              value = template.event_name || 'Event';
+              value = template.event_name || event?.title || 'Event';
               break;
             case 'event_date':
+              value = event?.date 
+                ? new Date(event.date).toLocaleDateString('en-US', { 
+                    day: 'numeric', 
+                    month: 'long', 
+                    year: 'numeric' 
+                  })
+                : new Date().toLocaleDateString('en-US', { 
+                    day: 'numeric', 
+                    month: 'long', 
+                    year: 'numeric' 
+                  });
+              break;
+            case 'event_time':
+              value = event?.time || '';
+              break;
+            case 'event_location':
+              value = event?.location || '';
+              break;
+            case 'event_category':
+              value = event?.category || '';
+              break;
+            case 'event_organizer':
+              value = event?.organizer || '';
+              break;
+            
+            // Result Information
+            case 'result':
+              value = 'Participant'; // You can make this dynamic based on participant data
+              break;
+            case 'position':
+              value = '';
+              break;
+            
+            // Certificate Information
+            case 'certificate_id':
+              value = `CERT-${eventId}-${participant.id}-${Date.now()}`;
+              break;
+            case 'issue_date':
               value = new Date().toLocaleDateString('en-US', { 
                 day: 'numeric', 
                 month: 'long', 
                 year: 'numeric' 
               });
               break;
-            case 'result':
-              value = 'Participant'; // You can customize this
-              break;
+            
+            // Custom Text
             case 'custom':
               value = field.defaultValue || '';
               break;
+            
             default:
               value = '';
           }
 
-          // Set text styles
-          ctx.font = `${field.fontWeight || 'normal'} ${field.fontSize || 16}px ${field.fontFamily || 'Arial'}`;
-          ctx.fillStyle = field.color || '#000000';
-          ctx.textAlign = field.textAlign || 'left';
-          
-          // Calculate position (center if needed)
-          let x = field.x;
-          if (field.textAlign === 'center') {
-            x = field.x + (field.width / 2);
-          } else if (field.textAlign === 'right') {
-            x = field.x + field.width;
+          // Only draw if there's a value
+          if (value) {
+            // Set text styles with fallbacks
+            ctx.font = `${field.fontWeight || 'normal'} ${field.fontSize || 16}px ${field.fontFamily || 'Arial'}`;
+            ctx.fillStyle = field.color || '#000000';
+            ctx.textAlign = field.textAlign || 'left';
+            ctx.textBaseline = 'middle';
+            
+            // Calculate position
+            let x = field.x;
+            if (field.textAlign === 'center') {
+              x = field.x + (field.width / 2);
+            } else if (field.textAlign === 'right') {
+              x = field.x + field.width;
+            }
+            
+            // Handle text wrapping if text is too long
+            const maxWidth = field.width;
+            const words = value.split(' ');
+            let line = '';
+            let y = field.y + (field.height / 2);
+            const lineHeight = (field.fontSize || 16) * 1.2;
+            
+            for (let i = 0; i < words.length; i++) {
+              const testLine = line + words[i] + ' ';
+              const metrics = ctx.measureText(testLine);
+              
+              if (metrics.width > maxWidth && i > 0) {
+                // Draw the current line and start a new one
+                ctx.fillText(line, x, y);
+                line = words[i] + ' ';
+                y += lineHeight;
+              } else {
+                line = testLine;
+              }
+            }
+            // Draw the last line
+            if (line) {
+              ctx.fillText(line, x, y);
+            }
           }
-          
-          // Draw text
-          ctx.fillText(value, x, field.y + (field.height / 2) + (field.fontSize / 3));
         });
 
         // Convert canvas to data URL
         const certificateUrl = canvas.toDataURL('image/png');
         
         // Save to database
-        const { data, error } = await supabase  // This await is now in an async function
+        const { data, error } = await supabase
           .from('issued_certificates')
           .insert({
             event_id: eventId,
             template_id: template.id,
             registration_id: participant.id,
             participant_name: participant.user_name,
+            participant_email: participant.user_email,
             certificate_url: certificateUrl,
-            generated_at: new Date().toISOString()
+            generated_at: new Date().toISOString(),
+            status: 'generated'
           })
           .select();
 
-        if (!error) {
-          setGenerated(prev => [...prev, { participant, url: certificateUrl }]);
+        if (error) {
+          console.error('Error saving certificate:', error);
+        } else {
+          setGenerated(prev => [...prev, { 
+            participant, 
+            url: certificateUrl,
+            id: data?.[0]?.id 
+          }]);
         }
         
         resolve(true);
-      };
+      } catch (error) {
+        console.error('Error generating certificate:', error);
+        resolve(false);
+      }
+    };
 
-      img.src = template.background_url;
-    });
-  };
+    img.onerror = () => {
+      console.error('Error loading background image');
+      resolve(false);
+    };
+
+    img.src = template.background_url;
+  });
+};
 
   // Generate all certificates
   const generateAll = async () => {
