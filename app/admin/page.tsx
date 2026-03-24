@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { fetchEvents, createEvent, deleteEvent, getAllRegistrations, deleteRegistration, updateRegistrationStatus, getEventParticipants } from '@/lib/supabaseClient';
 import { Event } from '@/types/event';
 import CertificateManager from '@/app/components/CertificateManager';
+import EventCertificates from '@/app/components/EventCertificates';
 import { 
   Calendar, Users, FileText, Settings, CheckCircle, 
   Download, Plus, BarChart3, Search, Filter, 
@@ -64,6 +65,10 @@ export default function AdminPage() {
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
   const [eventParticipants, setEventParticipants] = useState<Participant[]>([]);
   const [loadingParticipants, setLoadingParticipants] = useState(false);
+  
+  // New state for certificates tab in modal
+  const [activeParticipantTab, setActiveParticipantTab] = useState<'participants' | 'certificates'>('participants');
+  const [eventCertificates, setEventCertificates] = useState<any[]>([]);
 
   // Check admin authentication
   useEffect(() => {
@@ -129,10 +134,27 @@ export default function AdminPage() {
     }
   };
 
+  // Function to load certificates for a specific event
+  const loadEventCertificates = async (eventId: number) => {
+    try {
+      const { data, error } = await supabase
+        .from('issued_certificates')
+        .select('*')
+        .eq('event_id', eventId)
+        .order('generated_at', { ascending: false });
+
+      if (error) throw error;
+      setEventCertificates(data || []);
+    } catch (error) {
+      console.error('Error loading certificates:', error);
+    }
+  };
+
   // Function to handle View Details button click
   const handleViewDetails = async (event: Event) => {
     setSelectedEvent(event);
     await loadEventParticipants(event.id);
+    setActiveParticipantTab('participants'); // Reset to participants tab
     setShowParticipantsModal(true);
   };
 
@@ -682,7 +704,7 @@ export default function AdminPage() {
               <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between">
                 <div>
                   <h2 className="text-2xl font-bold text-gray-900">
-                    Participants for: {selectedEvent.title}
+                    Event Details: {selectedEvent.title}
                   </h2>
                   <p className="text-gray-600 mt-1">
                     Total Participants: {eventParticipants.length} • 
@@ -696,6 +718,35 @@ export default function AdminPage() {
                 >
                   <X className="w-6 h-6" />
                 </button>
+              </div>
+              
+              {/* Tabs for Participants and Certificates */}
+              <div className="border-b px-6">
+                <div className="flex gap-4">
+                  <button
+                    onClick={() => setActiveParticipantTab('participants')}
+                    className={`px-4 py-2 font-medium text-sm ${
+                      activeParticipantTab === 'participants'
+                        ? 'text-blue-600 border-b-2 border-blue-600'
+                        : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                  >
+                    Participants
+                  </button>
+                  <button
+                    onClick={() => {
+                      setActiveParticipantTab('certificates');
+                      loadEventCertificates(selectedEvent.id);
+                    }}
+                    className={`px-4 py-2 font-medium text-sm ${
+                      activeParticipantTab === 'certificates'
+                        ? 'text-blue-600 border-b-2 border-blue-600'
+                        : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                  >
+                    Generated Certificates
+                  </button>
+                </div>
               </div>
               
               <div className="p-6">
@@ -721,155 +772,148 @@ export default function AdminPage() {
                   </div>
                 </div>
 
-                {loadingParticipants ? (
-                  <div className="text-center py-12">
-                    <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-600 border-t-transparent mx-auto"></div>
-                    <p className="mt-4 text-gray-600">Loading participants...</p>
-                  </div>
-                ) : eventParticipants.length === 0 ? (
-                  <div className="text-center py-12">
-                    <Users className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                    <h3 className="text-lg font-medium text-gray-900 mb-2">No participants yet</h3>
-                    <p className="text-gray-600">No one has registered for this event yet.</p>
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            #
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Participant Info
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            College & Department
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Registration Date
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Status
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Actions
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-200">
-                        {eventParticipants.map((participant, index) => (
-                          <tr key={participant.id} className="hover:bg-gray-50">
-                            <td className="px-6 py-4 text-sm text-gray-500">
-                              {index + 1}
-                            </td>
-                            <td className="px-6 py-4">
-                              <div className="flex items-center">
-                                <div className="flex-shrink-0 h-10 w-10 bg-blue-100 rounded-full flex items-center justify-center">
-                                  <User className="h-6 w-6 text-blue-600" />
-                                </div>
-                                <div className="ml-4">
-                                  <div className="font-medium text-gray-900">{participant.user_name}</div>
-                                  <div className="text-sm text-gray-500 flex items-center">
-                                    <Mail className="w-3 h-3 mr-1" />
-                                    {participant.user_email}
+                {activeParticipantTab === 'participants' ? (
+                  // Participants Tab
+                  loadingParticipants ? (
+                    <div className="text-center py-12">
+                      <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-600 border-t-transparent mx-auto"></div>
+                      <p className="mt-4 text-gray-600">Loading participants...</p>
+                    </div>
+                  ) : eventParticipants.length === 0 ? (
+                    <div className="text-center py-12">
+                      <Users className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                      <h3 className="text-lg font-medium text-gray-900 mb-2">No participants yet</h3>
+                      <p className="text-gray-600">No one has registered for this event yet.</p>
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              #
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Participant Info
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              College & Department
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Registration Date
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Status
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Actions
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200">
+                          {eventParticipants.map((participant, index) => (
+                            <tr key={participant.id} className="hover:bg-gray-50">
+                              <td className="px-6 py-4 text-sm text-gray-500">
+                                {index + 1}
+                              </td>
+                              <td className="px-6 py-4">
+                                <div className="flex items-center">
+                                  <div className="flex-shrink-0 h-10 w-10 bg-blue-100 rounded-full flex items-center justify-center">
+                                    <User className="h-6 w-6 text-blue-600" />
+                                  </div>
+                                  <div className="ml-4">
+                                    <div className="font-medium text-gray-900">{participant.user_name}</div>
+                                    <div className="text-sm text-gray-500 flex items-center">
+                                      <Mail className="w-3 h-3 mr-1" />
+                                      {participant.user_email}
+                                    </div>
                                   </div>
                                 </div>
-                              </div>
-                            </td>
-                            <td className="px-6 py-4">
-                              <div className="text-sm text-gray-900 flex items-center">
-                                <Building className="w-4 h-4 mr-2 text-blue-600" />
-                                {participant.user_college}
-                              </div>
-                              <div className="text-sm text-gray-500 flex items-center mt-1">
-                                <GraduationCap className="w-4 h-4 mr-2 text-green-600" />
-                                {participant.user_department}
-                              </div>
-                            </td>
-                            <td className="px-6 py-4">
-                              <div className="text-sm text-gray-900">
-                                {new Date(participant.registration_date).toLocaleDateString()}
-                              </div>
-                              <div className="text-xs text-gray-500">
-                                {new Date(participant.registration_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                              </div>
-                            </td>
-                            <td className="px-6 py-4">
-                              <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                                participant.status === 'attended' ? 'bg-green-100 text-green-800' :
-                                participant.status === 'cancelled' ? 'bg-red-100 text-red-800' :
-                                'bg-blue-100 text-blue-800'
-                              }`}>
-                                {participant.status}
-                              </span>
-                            </td>
-                            <td className="px-6 py-4">
-                              <div className="flex items-center gap-2">
-                                {participant.status === 'registered' && (
-                                  <>
-                                    <button
-                                      onClick={() => handleUpdateStatusFromModal(participant.id, 'attended')}
-                                      className="text-xs bg-green-100 text-green-800 px-3 py-1 rounded hover:bg-green-200 transition-colors"
-                                      title="Mark as Attended"
-                                    >
-                                      Attended
-                                    </button>
-                                    {/* // In the event card, add this near the event title */}
-{/* Certificate Status */}
-{event.certificate_ready && (
-  <div className="mt-2 flex items-center gap-2">
-    <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full flex items-center gap-1">
-      <Award className="w-3 h-3" />
-      Certificate Ready
-    </span>
-    {/* Add a button to view assigned certificates */}
-    <button
-      onClick={() => router.push(`/admin/certificates?eventId=${event.id}`)}
-      className="text-xs text-blue-600 hover:text-blue-800"
-    >
-      View Certificates
-    </button>
-  </div>
-)}
-
-                                    <button
-                                      onClick={() => handleUpdateStatusFromModal(participant.id, 'cancelled')}
-                                      className="text-xs bg-yellow-100 text-yellow-800 px-3 py-1 rounded hover:bg-yellow-200 transition-colors"
-                                      title="Mark as Cancelled"
-                                    >
-                                      Cancel
-                                    </button>
-                                  </>
-                                )}
-                                <button
-                                  onClick={() => handleDeleteRegistrationFromModal(participant.id)}
-                                  className="text-xs bg-red-100 text-red-800 px-3 py-1 rounded hover:bg-red-200 transition-colors"
-                                  title="Delete Registration"
-                                >
-                                  Delete
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                              </td>
+                              <td className="px-6 py-4">
+                                <div className="text-sm text-gray-900 flex items-center">
+                                  <Building className="w-4 h-4 mr-2 text-blue-600" />
+                                  {participant.user_college}
+                                </div>
+                                <div className="text-sm text-gray-500 flex items-center mt-1">
+                                  <GraduationCap className="w-4 h-4 mr-2 text-green-600" />
+                                  {participant.user_department}
+                                </div>
+                              </td>
+                              <td className="px-6 py-4">
+                                <div className="text-sm text-gray-900">
+                                  {new Date(participant.registration_date).toLocaleDateString()}
+                                </div>
+                                <div className="text-xs text-gray-500">
+                                  {new Date(participant.registration_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                </div>
+                              </td>
+                              <td className="px-6 py-4">
+                                <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                                  participant.status === 'attended' ? 'bg-green-100 text-green-800' :
+                                  participant.status === 'cancelled' ? 'bg-red-100 text-red-800' :
+                                  'bg-blue-100 text-blue-800'
+                                }`}>
+                                  {participant.status}
+                                </span>
+                              </td>
+                              <td className="px-6 py-4">
+                                <div className="flex items-center gap-2">
+                                  {participant.status === 'registered' && (
+                                    <>
+                                      <button
+                                        onClick={() => handleUpdateStatusFromModal(participant.id, 'attended')}
+                                        className="text-xs bg-green-100 text-green-800 px-3 py-1 rounded hover:bg-green-200 transition-colors"
+                                        title="Mark as Attended"
+                                      >
+                                        Attended
+                                      </button>
+                                      <button
+                                        onClick={() => handleUpdateStatusFromModal(participant.id, 'cancelled')}
+                                        className="text-xs bg-yellow-100 text-yellow-800 px-3 py-1 rounded hover:bg-yellow-200 transition-colors"
+                                        title="Mark as Cancelled"
+                                      >
+                                        Cancel
+                                      </button>
+                                    </>
+                                  )}
+                                  <button
+                                    onClick={() => handleDeleteRegistrationFromModal(participant.id)}
+                                    className="text-xs bg-red-100 text-red-800 px-3 py-1 rounded hover:bg-red-200 transition-colors"
+                                    title="Delete Registration"
+                                  >
+                                    Delete
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )
+                ) : (
+                  // Certificates Tab
+                  <EventCertificates 
+                    eventId={selectedEvent.id}
+                    participants={eventParticipants}
+                  />
                 )}
 
-                {/* Export Button */}
-                <div className="mt-6 flex justify-end">
-                  <button
-                    onClick={() => {
-                      alert('Export feature coming soon!');
-                    }}
-                    className="px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:from-blue-700 hover:to-purple-700 transition-all flex items-center gap-2"
-                  >
-                    <Download className="w-4 h-4" />
-                    Export to CSV
-                  </button>
-                </div>
+                {/* Export Button (only show in participants tab) */}
+                {activeParticipantTab === 'participants' && eventParticipants.length > 0 && (
+                  <div className="mt-6 flex justify-end">
+                    <button
+                      onClick={() => {
+                        alert('Export feature coming soon!');
+                      }}
+                      className="px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:from-blue-700 hover:to-purple-700 transition-all flex items-center gap-2"
+                    >
+                      <Download className="w-4 h-4" />
+                      Export to CSV
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -1014,6 +1058,29 @@ export default function AdminPage() {
                             <span className="text-sm">Organizer: {event.organizer}</span>
                           </div>
                         </div>
+
+                        {/* Certificate Status */}
+                        {event.certificate_ready && (
+                          <div className="mt-4 flex items-center gap-2">
+                            <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full flex items-center gap-1">
+                              <Award className="w-3 h-3" />
+                              Certificate Ready
+                            </span>
+                            <button
+                              onClick={() => {
+                                // Store the event and open certificates tab directly
+                                setSelectedEvent(event);
+                                setActiveParticipantTab('certificates');
+                                loadEventParticipants(event.id);
+                                loadEventCertificates(event.id);
+                                setShowParticipantsModal(true);
+                              }}
+                              className="text-xs text-blue-600 hover:text-blue-800"
+                            >
+                              View Certificates
+                            </button>
+                          </div>
+                        )}
                       </div>
                       
                       {/* Event Footer */}
@@ -1161,66 +1228,65 @@ export default function AdminPage() {
           </div>
         )}
 
-        
-{activeTab === 'certificates' && (
-  <div className="bg-white rounded-xl shadow-lg overflow-hidden">
-    <div className="p-6">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900">Certificate Management</h2>
-          <p className="text-gray-600 mt-1">Create and manage certificate templates</p>
-        </div>
-        <button
-          onClick={() => router.push('/admin/certificates')}
-          className="px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:from-blue-700 hover:to-purple-700 flex items-center gap-2"
-        >
-          <FileText className="w-4 h-4" />
-          Manage Certificates
-        </button>
-      </div>
+        {activeTab === 'certificates' && (
+          <div className="bg-white rounded-xl shadow-lg overflow-hidden">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-900">Certificate Management</h2>
+                  <p className="text-gray-600 mt-1">Create and manage certificate templates</p>
+                </div>
+                <button
+                  onClick={() => router.push('/admin/certificates')}
+                  className="px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:from-blue-700 hover:to-purple-700 flex items-center gap-2"
+                >
+                  <FileText className="w-4 h-4" />
+                  Manage Certificates
+                </button>
+              </div>
 
-      {/* Quick Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <div className="bg-blue-50 rounded-xl p-6">
-          <FileText className="w-8 h-8 text-blue-600 mb-3" />
-          <p className="text-2xl font-bold text-gray-900">0</p>
-          <p className="text-gray-600">Templates</p>
-        </div>
-        <div className="bg-green-50 rounded-xl p-6">
-          <Award className="w-8 h-8 text-green-600 mb-3" />
-          <p className="text-2xl font-bold text-gray-900">0</p>
-          <p className="text-gray-600">Certificates Issued</p>
-        </div>
-        <div className="bg-purple-50 rounded-xl p-6">
-          <Users className="w-8 h-8 text-purple-600 mb-3" />
-          <p className="text-2xl font-bold text-gray-900">0</p>
-          <p className="text-gray-600">Eligible Participants</p>
-        </div>
-      </div>
+              {/* Quick Stats */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                <div className="bg-blue-50 rounded-xl p-6">
+                  <FileText className="w-8 h-8 text-blue-600 mb-3" />
+                  <p className="text-2xl font-bold text-gray-900">0</p>
+                  <p className="text-gray-600">Templates</p>
+                </div>
+                <div className="bg-green-50 rounded-xl p-6">
+                  <Award className="w-8 h-8 text-green-600 mb-3" />
+                  <p className="text-2xl font-bold text-gray-900">0</p>
+                  <p className="text-gray-600">Certificates Issued</p>
+                </div>
+                <div className="bg-purple-50 rounded-xl p-6">
+                  <Users className="w-8 h-8 text-purple-600 mb-3" />
+                  <p className="text-2xl font-bold text-gray-900">0</p>
+                  <p className="text-gray-600">Eligible Participants</p>
+                </div>
+              </div>
 
-      {/* Quick Actions */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <button
-          onClick={() => router.push('/admin/certificates')}
-          className="p-6 border-2 border-dashed border-gray-300 rounded-xl hover:border-blue-500 hover:bg-blue-50 transition-all text-center"
-        >
-          <Plus className="w-8 h-8 text-gray-400 mx-auto mb-3" />
-          <p className="font-medium text-gray-900">Create New Template</p>
-          <p className="text-sm text-gray-600 mt-1">Design a custom certificate template</p>
-        </button>
-        
-        <button
-          onClick={() => router.push('/admin/certificates')}
-          className="p-6 border-2 border-dashed border-gray-300 rounded-xl hover:border-green-500 hover:bg-green-50 transition-all text-center"
-        >
-          <Upload className="w-8 h-8 text-gray-400 mx-auto mb-3" />
-          <p className="font-medium text-gray-900">Upload Existing</p>
-          <p className="text-sm text-gray-600 mt-1">Upload a certificate image or PDF</p>
-        </button>
-      </div>
-    </div>
-  </div>
-)}
+              {/* Quick Actions */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <button
+                  onClick={() => router.push('/admin/certificates')}
+                  className="p-6 border-2 border-dashed border-gray-300 rounded-xl hover:border-blue-500 hover:bg-blue-50 transition-all text-center"
+                >
+                  <Plus className="w-8 h-8 text-gray-400 mx-auto mb-3" />
+                  <p className="font-medium text-gray-900">Create New Template</p>
+                  <p className="text-sm text-gray-600 mt-1">Design a custom certificate template</p>
+                </button>
+                
+                <button
+                  onClick={() => router.push('/admin/certificates')}
+                  className="p-6 border-2 border-dashed border-gray-300 rounded-xl hover:border-green-500 hover:bg-green-50 transition-all text-center"
+                >
+                  <Upload className="w-8 h-8 text-gray-400 mx-auto mb-3" />
+                  <p className="font-medium text-gray-900">Upload Existing</p>
+                  <p className="text-sm text-gray-600 mt-1">Upload a certificate image or PDF</p>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
     </div>
   );
