@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { fetchEvents, createEvent, deleteEvent, getAllRegistrations, deleteRegistration, updateRegistrationStatus, getEventParticipants } from '@/lib/supabaseClient';
+import { fetchEvents, createEvent, deleteEvent, getAllRegistrations, deleteRegistration, updateRegistrationStatus, getEventParticipants, supabase } from '@/lib/supabaseClient';
 import { Event } from '@/types/event';
 import CertificateManager from '@/app/components/CertificateManager';
 import EventCertificates from '@/app/components/EventCertificates';

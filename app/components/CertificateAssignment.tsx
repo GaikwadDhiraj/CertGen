@@ -8,7 +8,7 @@ import {
   MapPin, Tag, ChevronRight
 } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
-import CertificateGenerator from './CertificateGenerator';
+//import CertificateGenerator from './CertificateGenerator';
 import CertificatePreview from './CertificatePreview';
 
 interface CertificateAssignmentProps {
