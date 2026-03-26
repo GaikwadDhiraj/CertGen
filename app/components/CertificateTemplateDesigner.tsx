@@ -2,11 +2,12 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { 
   Upload, Save, Download, Trash2, Plus, X, Move, 
   Type, Calendar, QrCode, PenTool, ChevronLeft,
   Grid, Maximize2, Minimize2, Eye, EyeOff, Settings,
-  FileText, Image as ImageIcon
+  FileText, Image as ImageIcon, Sparkles, ExternalLink
 } from 'lucide-react';
 import CertificateFieldMarker from './CertificateFieldMarker';
 
@@ -15,6 +16,7 @@ export default function CertificateTemplateDesigner({
   onSave, 
   onClose 
 }) {
+  const router = useRouter();
   const [name, setName] = useState(template?.name || '');
   const [description, setDescription] = useState(template?.description || '');
   const [backgroundUrl, setBackgroundUrl] = useState(template?.background_url || '');
@@ -209,6 +211,17 @@ export default function CertificateTemplateDesigner({
       case 'custom': return field.defaultValue || 'Custom Text';
       default: return 'Sample Text';
     }
+  };
+
+  // Navigate to Certificate Creator
+  const openCertificateCreator = () => {
+    // You can pass template data as query params if needed
+    const params = new URLSearchParams();
+    if (name) params.append('name', name);
+    if (backgroundUrl) params.append('backgroundUrl', backgroundUrl);
+    if (fields.length) params.append('hasFields', 'true');
+    
+    router.push(`/admin/certificates/creator${params.toString() ? `?${params.toString()}` : ''}`);
   };
 
   return (
@@ -433,6 +446,22 @@ export default function CertificateTemplateDesigner({
 
         {/* Right Sidebar - Upload & Settings */}
         <div className="w-80 bg-white border-l overflow-y-auto">
+          {/* Certificate Creator Button */}
+          <div className="p-4 border-b">
+            <h3 className="font-medium text-gray-900 mb-3">✨ Advanced Designer</h3>
+            <button
+              onClick={openCertificateCreator}
+              className="w-full p-4 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg hover:from-purple-600 hover:to-pink-600 transition-all flex items-center justify-center gap-2 shadow-md hover:shadow-lg"
+            >
+              <Sparkles className="w-5 h-5" />
+              <span className="font-medium">Open Certificate Creator</span>
+              <ExternalLink className="w-4 h-4" />
+            </button>
+            <p className="text-xs text-gray-500 text-center mt-2">
+              Create beautiful certificates with drag-and-drop editor
+            </p>
+          </div>
+
           <div className="p-4 border-b">
             <h3 className="font-medium text-gray-900 mb-3">1. Upload Certificate</h3>
             
